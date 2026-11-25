@@ -1053,6 +1053,51 @@ local function acharMaisProximoGeral(meuRoot, raioMax, filtroExtra)
 end
 
 -- ==========================================
+-- DESVIO QUANDO AMIGO (AMG) ESTA NA FRENTE E INIMIGO ESTA ATRAS
+-- ==========================================
+local function desviarMiraSeAmigoNaFrente(meuRoot)
+	if not meuRoot then return end
+	if ativo and targetLockHabilitadoNoPainel then return end
+	if UserInputService:GetFocusedTextBox() then return end
+
+	local lookPlano = Vector3.new(meuRoot.CFrame.LookVector.X, 0, meuRoot.CFrame.LookVector.Z)
+	if lookPlano.Magnitude < 0.001 then return end
+	lookPlano = lookPlano.Unit
+
+	local amigoBloqueando = false
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer and ehAmigoAMG(plr) then
+			local _, rAmigo = getCharAndRoot(plr)
+			if rAmigo then
+				local delta = Vector3.new(rAmigo.Position.X - meuRoot.Position.X, 0, rAmigo.Position.Z - meuRoot.Position.Z)
+				local dist = delta.Magnitude
+				if dist > 0.1 and dist <= DISTANCIA_MAXIMA then
+					local dirAmigo = delta.Unit
+					if lookPlano:Dot(dirAmigo) > 0.85 then
+						amigoBloqueando = true
+						break
+					end
+				end
+			end
+		end
+	end
+
+	if not amigoBloqueando then return end
+
+	local inimigoAtrasOuPerto = acharMaisProximoGeral(meuRoot, DISTANCIA_MAXIMA)
+	if not inimigoAtrasOuPerto then return end
+
+	local dx = inimigoAtrasOuPerto.Position.X - meuRoot.Position.X
+	local dz = inimigoAtrasOuPerto.Position.Z - meuRoot.Position.Z
+	if (dx * dx + dz * dz) > 0.0025 then
+		local yawDesejado = math.atan2(-dx, -dz)
+		pcall(function()
+			meuRoot.CFrame = CFrame.new(meuRoot.Position) * CFrame.fromEulerAnglesYXZ(0, yawDesejado, 0)
+		end)
+	end
+end
+
+-- ==========================================
 -- SELECAO PERSISTENTE DO KILL AURA (FOCUS ESTRITO + ZERO AMIGOS)
 -- ==========================================
 local function obterAlvoKillAuraPersistente(meuRoot, raioMax)
@@ -1170,7 +1215,10 @@ local function executarCliqueRapido()
 	end
 end
 
-local function dispararPulsoAtaque(char)
+local function dispararPulsoAtaque(char, meuRoot)
+	if meuRoot then
+		desviarMiraSeAmigoNaFrente(meuRoot)
+	end
 	if char then
 		local tool = char:FindFirstChildOfClass("Tool")
 		if tool and tool.Parent == char then
@@ -1224,7 +1272,7 @@ local function processarKillAuraFrame(agora)
 	end
 
 	for _ = 1, RAJADA_KILL_AURA do
-		dispararPulsoAtaque(char)
+		dispararPulsoAtaque(char, meuRoot)
 	end
 
 	return true
@@ -1245,7 +1293,7 @@ local function processarAutoClickFrame(agora, killAuraAtacouNesteFrame)
 	local char, meuRoot = getCharAndRoot(LocalPlayer)
 	if meuRoot and haAlvoNoAlcanceAutoClick(meuRoot) then
 		ultimoDisparoAutoClickTick = agora
-		dispararPulsoAtaque(char)
+		dispararPulsoAtaque(char, meuRoot)
 	end
 end
 
