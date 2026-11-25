@@ -118,6 +118,7 @@ local alvoPvpLoopPlayer = nil
 local alvoKillAuraPlayer = nil
 local ultimoDisparoKillAuraTick = 0
 local ultimoDisparoAutoClickTick = 0
+local janelaRegistroHitAte = 0
 
 local hitboxAtivo = HITBOX_PADRAO_ATIVO
 local hitboxVisivel = HITBOX_VISIVEL_PADRAO
@@ -615,6 +616,7 @@ local function recuperarEstadoAposQueda(novoChar)
 	alvoAtual = nil
 	alvoPvpLoopPlayer = nil
 	alvoKillAuraPlayer = nil
+	janelaRegistroHitAte = 0
 	pulsoMiraAte = 0
 	yawAntesPulso = nil
 	yawAplicadoNoPulso = nil
@@ -1063,6 +1065,7 @@ local sincronizarHitboxEMarcadores
 local function cancelarAlvoPvpLoop()
 	alvoPvpLoopPlayer = nil
 	alvoAtual = nil
+	janelaRegistroHitAte = 0
 	if alvoKillAuraPlayer and pvpFocusLoopAtivo then
 		alvoKillAuraPlayer = nil
 	end
@@ -1072,12 +1075,12 @@ local function cancelarAlvoPvpLoop()
 end
 
 -- ==========================================
--- PVP FOCUS LOOP (PRIMEIRO GOLPE LIVRE SEM HITBOX -> ATIVA HITBOX E FOCO NO ALVO)
+-- PVP FOCUS LOOP (PRIMEIRO GOLPE LIVRE SEM HITBOX -> ATIVA HITBOX, FOCO E LOCK NO ALVO)
 -- ==========================================
 local function obterRaioHitRegistro()
-	local raio = DISTANCIA_MAXIMA + 6
+	local raio = DISTANCIA_MAXIMA + 10
 	if hitboxAtivo then
-		raio = math.max(raio, hitboxSize + 10)
+		raio = math.max(raio, hitboxSize + 14)
 	end
 	return raio
 end
@@ -1118,8 +1121,8 @@ local function registrarAlvoPvpPorHit()
 						local dirPlano = Vector3.new(delta.X, 0, delta.Z)
 						if dirPlano.Magnitude > 0.01 then
 							local dot = lookPlano:Dot(dirPlano.Unit)
-							if dot < 0.25 then
-								penalidadeAngulo = (0.25 - dot) * 18
+							if dot < 0.05 then
+								penalidadeAngulo = (0.05 - dot) * 14
 							end
 						end
 					end
@@ -1135,6 +1138,7 @@ local function registrarAlvoPvpPorHit()
 
 	if melhorPlr then
 		alvoPvpLoopPlayer = melhorPlr
+		janelaRegistroHitAte = 0
 		if sincronizarHitboxEMarcadores then
 			pcall(sincronizarHitboxEMarcadores)
 		end
@@ -1704,7 +1708,7 @@ end
 local function criarPainelHitbox()
 	if not parentGui then return end
 	local antiga = parentGui:FindFirstChild("UniversalCombatPanel")
-	if antiga then antigo:Destroy() end
+	if antiga then antiga:Destroy() end
 
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "UniversalCombatPanel"
@@ -2175,6 +2179,7 @@ local function criarPainelHitbox()
 		btnPvpLoop.BackgroundColor3 = pvpFocusLoopAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
 		alvoPvpLoopPlayer = nil
 		alvoAtual = nil
+		janelaRegistroHitAte = 0
 		sincronizarHitboxEMarcadores()
 	end)
 
@@ -2313,20 +2318,24 @@ local function aplicarFocoNoAlvo()
 
 	if pvpFocusLoopAtivo then
 		local rLoop, _, dentroDoAlcance = obterAlvoPvpLoopRegistrado(meuRoot)
-		alvoAtual = (dentroDoAlcance and rLoop) or nil
-		return
-	end
+		if rLoop and dentroDoAlcance then
+			alvoAtual = rLoop
+		else
+			alvoAtual = nil
+			return
+		end
+	else
+		local maisProximo, distMaisProximo = acharMaisProximo(meuRoot)
+		local distAtual = distanciaPara(meuRoot, alvoAtual)
 
-	local maisProximo, distMaisProximo = acharMaisProximo(meuRoot)
-	local distAtual = distanciaPara(meuRoot, alvoAtual)
-
-	if not maisProximo then
-		alvoAtual = nil
-		return
-	elseif not alvoAtual or distAtual > DISTANCIA_MAXIMA then
-		alvoAtual = maisProximo
-	elseif maisProximo ~= alvoAtual and (distAtual - distMaisProximo) > MARGEM_TROCA then
-		alvoAtual = maisProximo
+		if not maisProximo then
+			alvoAtual = nil
+			return
+		elseif not alvoAtual or distAtual > DISTANCIA_MAXIMA then
+			alvoAtual = maisProximo
+		elseif maisProximo ~= alvoAtual and (distAtual - distMaisProximo) > MARGEM_TROCA then
+			alvoAtual = maisProximo
+		end
 	end
 
 	if not alvoAtual or not alvoAtual.Parent then return end
@@ -2369,6 +2378,8 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		end
 	elseif input.UserInputType == Enum.UserInputType.MouseButton1 and not ignorarProximoDisparoHit then
 		if pvpFocusLoopAtivo and not alvoPvpLoopPlayer then
+			janelaRegistroHitAte = os.clock() + 0.35
+			registrarAlvoPvpPorHit()
 			task.defer(registrarAlvoPvpPorHit)
 		end
 	end
@@ -2384,6 +2395,9 @@ local ultimoFpsExibido = nil
 local ultimoPingExibido = nil
 
 RunService.RenderStepped:Connect(function(dt)
+	if pvpFocusLoopAtivo and not alvoPvpLoopPlayer and os.clock() <= janelaRegistroHitAte then
+		registrarAlvoPvpPorHit()
+	end
 	aplicarFocoNoAlvo()
 	restaurarPulsoMiraKillAura()
 
