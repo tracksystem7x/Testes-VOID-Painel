@@ -49,6 +49,7 @@ local JUMPPOWER_BASE = 50
 local JUMP_FATOR_SUAVE = 0.08
 
 local TARGET_LOCK_PADRAO_HABILITADO = true
+local PVP_FOCUS_LOOP_PADRAO_ATIVO = false
 local BACK_COSTAS_PADRAO_ATIVO = false
 local ANTI_RAGDOLL_PADRAO_ATIVO = false
 local ANTI_GRAB_RAG_PADRAO_ATIVO = false
@@ -82,7 +83,7 @@ local COR_HITBOX_AURA = Color3.fromRGB(220, 55, 55)
 local ROXO_NEXUS = Color3.fromRGB(155, 65, 255)
 local BOTAO_CINZA = Color3.fromRGB(42, 42, 50)
 local BOTAO_ROXO_ON = Color3.fromRGB(145, 50, 250)
-local POSICAO_PAINEL_PADRAO = UDim2.new(1, -214, 1, -486)
+local POSICAO_PAINEL_PADRAO = UDim2.new(1, -214, 1, -509)
 -- ==========================================
 
 if getgenv then
@@ -92,6 +93,7 @@ end
 
 local ativo = false
 local targetLockHabilitadoNoPainel = TARGET_LOCK_PADRAO_HABILITADO
+local pvpFocusLoopAtivo = PVP_FOCUS_LOOP_PADRAO_ATIVO
 local backCostasAtivo = BACK_COSTAS_PADRAO_ATIVO
 local antiRagdollAtivo = ANTI_RAGDOLL_PADRAO_ATIVO
 local antiGrabRagAtivo = ANTI_GRAB_RAG_PADRAO_ATIVO
@@ -111,6 +113,7 @@ local jumpPowerOriginalSalvo = nil
 local boostFpsRedeAtivo = false
 
 local alvoAtual = nil
+local alvoPvpLoopPlayer = nil
 local alvoKillAuraPlayer = nil
 local ultimoDisparoKillAuraTick = 0
 local ultimoDisparoAutoClickTick = 0
@@ -608,6 +611,7 @@ end
 
 local function recuperarEstadoAposQueda(novoChar)
 	alvoAtual = nil
+	alvoPvpLoopPlayer = nil
 	alvoKillAuraPlayer = nil
 	pulsoMiraAte = 0
 	yawAntesPulso = nil
@@ -1053,6 +1057,60 @@ local function acharMaisProximoGeral(meuRoot, raioMax, filtroExtra)
 end
 
 -- ==========================================
+-- PVP FOCUS LOOP (MEMORIA DO ALVO ATE MORRER + ALCANCE LONGO DO HITBOX)
+-- ==========================================
+local function obterRaioPvpLoop()
+	local raio = DISTANCIA_MAXIMA
+	if hitboxAtivo then
+		raio = math.max(raio, hitboxSize + 8)
+	end
+	return raio
+end
+
+local function obterAlvoPvpLoopRegistrado(meuRoot)
+	if not pvpFocusLoopAtivo or not meuRoot then
+		alvoPvpLoopPlayer = nil
+		return nil, nil, false
+	end
+
+	local raioBase = obterRaioPvpLoop()
+
+	-- Se ja ha um alvo registrado, mantem ele vivo mesmo se sair temporariamente do alcance
+	if alvoPvpLoopPlayer and alvoPvpLoopPlayer.Parent == Players and jogadorElegivelComoAlvo(alvoPvpLoopPlayer) then
+		local _, rAtual, humAtual = getCharAndRoot(alvoPvpLoopPlayer)
+		if rAtual and humAtual and humAtual.Health > 0 then
+			local distAtual = (rAtual.Position - meuRoot.Position).Magnitude
+			local dentroDoAlcance = (distAtual <= raioBase and distAtual > 0.1)
+			return rAtual, alvoPvpLoopPlayer, dentroDoAlcance
+		end
+		-- Morreu ou perdeu root/hum valido -> limpa e libera para o proximo
+		alvoPvpLoopPlayer = nil
+	end
+
+	-- Sem alvo registrado: escolhe o elegivel mais proximo dentro do alcance
+	local melhorRoot = nil
+	local melhorPlr = nil
+	local menorDist = raioBase
+
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if jogadorElegivelComoAlvo(plr) then
+			local _, r, hum = getCharAndRoot(plr)
+			if r and hum and hum.Health > 0 then
+				local d = (r.Position - meuRoot.Position).Magnitude
+				if d <= raioBase and d > 0.1 and d < menorDist then
+					menorDist = d
+					melhorRoot = r
+					melhorPlr = plr
+				end
+			end
+		end
+	end
+
+	alvoPvpLoopPlayer = melhorPlr
+	return melhorRoot, melhorPlr, (melhorRoot ~= nil)
+end
+
+-- ==========================================
 -- DESVIO QUANDO AMIGO (AMG) ESTA NA FRENTE E INIMIGO ESTA ATRAS
 -- ==========================================
 local function desviarMiraSeAmigoNaFrente(meuRoot)
@@ -1102,6 +1160,16 @@ end
 -- ==========================================
 local function obterAlvoKillAuraPersistente(meuRoot, raioMax)
 	if not meuRoot then return nil, nil end
+
+	if pvpFocusLoopAtivo then
+		local rLoop, plrLoop, dentroDoAlcance = obterAlvoPvpLoopRegistrado(meuRoot)
+		if rLoop and plrLoop and dentroDoAlcance then
+			alvoKillAuraPlayer = plrLoop
+			return rLoop, plrLoop
+		end
+		alvoKillAuraPlayer = nil
+		return nil, nil
+	end
 
 	if alvoKillAuraPlayer and alvoKillAuraPlayer.Parent == Players and jogadorElegivelComoAlvo(alvoKillAuraPlayer) then
 		local _, rootTravado, humTravado = getCharAndRoot(alvoKillAuraPlayer)
@@ -1186,6 +1254,12 @@ end
 
 local function haAlvoNoAlcanceAutoClick(meuRoot)
 	if not meuRoot then return false end
+
+	if pvpFocusLoopAtivo then
+		local rLoop, _, dentroDoAlcance = obterAlvoPvpLoopRegistrado(meuRoot)
+		return (rLoop ~= nil and dentroDoAlcance)
+	end
+
 	local raioEfetivo = obterAlcanceAutoClick()
 
 	for _, plr in ipairs(Players:GetPlayers()) do
@@ -1216,7 +1290,7 @@ local function executarCliqueRapido()
 end
 
 local function dispararPulsoAtaque(char, meuRoot)
-	if meuRoot then
+	if meuRoot and not pvpFocusLoopAtivo then
 		desviarMiraSeAmigoNaFrente(meuRoot)
 	end
 	if char then
@@ -1373,6 +1447,11 @@ local function sincronizarHitboxEMarcadores()
 	local rootsAtivos = {}
 	local transpAlvo = hitboxVisivel and HITBOX_TRANSPARENCIA_VISIVEL or 1
 	local assinaturaAlvo = string.format("%d|%.4f", hitboxSize, transpAlvo)
+	local _, meuRoot = getCharAndRoot(LocalPlayer)
+	local _, plrLoopFocado, dentroLoop = nil, nil, false
+	if pvpFocusLoopAtivo and meuRoot then
+		_, plrLoopFocado, dentroLoop = obterAlvoPvpLoopRegistrado(meuRoot)
+	end
 
 	for _, plr in ipairs(Players:GetPlayers()) do
 		if plr ~= LocalPlayer then
@@ -1381,7 +1460,16 @@ local function sincronizarHitboxEMarcadores()
 				local isAMG = ehAmigoAMG(plr)
 				local isFocus = (not isAMG) and temFiltroFocusAtivo() and ehAlvoFocus(plr)
 
-				if (isAMG or (temFiltroFocusAtivo() and not isFocus)) and originaisRoot[root] then
+				local deveExpandir = hitboxAtivo and jogadorElegivelComoAlvo(plr)
+				if deveExpandir and pvpFocusLoopAtivo and not temFiltroFocusAtivo() then
+					if plrLoopFocado and dentroLoop then
+						deveExpandir = (plr == plrLoopFocado)
+					else
+						deveExpandir = false
+					end
+				end
+
+				if not deveExpandir and originaisRoot[root] then
 					restaurarRoot(root)
 				end
 
@@ -1390,7 +1478,7 @@ local function sincronizarHitboxEMarcadores()
 					if isAMG then
 						m.tagGui.Enabled = true
 						m.tagDot.BackgroundColor3 = Color3.fromRGB(45, 215, 95)
-					elseif isFocus then
+					elseif isFocus or (pvpFocusLoopAtivo and plr == plrLoopFocado) then
 						m.tagGui.Enabled = true
 						m.tagDot.BackgroundColor3 = Color3.fromRGB(230, 45, 45)
 					else
@@ -1398,7 +1486,6 @@ local function sincronizarHitboxEMarcadores()
 					end
 				end
 
-				local deveExpandir = hitboxAtivo and jogadorElegivelComoAlvo(plr)
 				if deveExpandir then
 					rootsAtivos[root] = true
 					if not originaisRoot[root] then
@@ -1556,7 +1643,7 @@ local function criarPainelHitbox()
 
 	local frame = Instance.new("Frame")
 	frame.Name = "MainPanel"
-	frame.Size = UDim2.new(0, 200, 0, 476)
+	frame.Size = UDim2.new(0, 200, 0, 499)
 	frame.Position = POSICAO_PAINEL_PADRAO
 	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
 	frame.BorderSizePixel = 0
@@ -1650,10 +1737,19 @@ local function criarPainelHitbox()
 	)
 	btnLock.BackgroundColor3 = targetLockHabilitadoNoPainel and BOTAO_ROXO_ON or BOTAO_CINZA
 
+	local btnPvpLoop = criarBotaoPadrao(
+		pagCombat,
+		pvpFocusLoopAtivo and "PvP Focus Loop: ON" or "PvP Focus Loop: OFF",
+		UDim2.new(0, 8, 0, 46),
+		UDim2.new(1, -16, 0, 20),
+		11
+	)
+	btnPvpLoop.BackgroundColor3 = pvpFocusLoopAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
+
 	local btnBackCostas = criarBotaoPadrao(
 		pagCombat,
 		backCostasAtivo and "Back / Costas: ON" or "Back / Costas: OFF",
-		UDim2.new(0, 8, 0, 46),
+		UDim2.new(0, 8, 0, 69),
 		UDim2.new(1, -16, 0, 20),
 		11
 	)
@@ -1662,7 +1758,7 @@ local function criarPainelHitbox()
 	local btnAntiRagdoll = criarBotaoPadrao(
 		pagCombat,
 		antiRagdollAtivo and "Anti-Ragdoll: ON" or "Anti-Ragdoll: OFF",
-		UDim2.new(0, 8, 0, 69),
+		UDim2.new(0, 8, 0, 92),
 		UDim2.new(1, -16, 0, 20),
 		11
 	)
@@ -1671,7 +1767,7 @@ local function criarPainelHitbox()
 	local btnAntiGrabRag = criarBotaoPadrao(
 		pagCombat,
 		antiGrabRagAtivo and "Anti Grab Rag: ON" or "Anti Grab Rag: OFF",
-		UDim2.new(0, 8, 0, 92),
+		UDim2.new(0, 8, 0, 115),
 		UDim2.new(1, -16, 0, 20),
 		11
 	)
@@ -1680,7 +1776,7 @@ local function criarPainelHitbox()
 	local btnDeathTp = criarBotaoPadrao(
 		pagCombat,
 		deathTpAtivo and "Death TP: ON" or "Death TP: OFF",
-		UDim2.new(0, 8, 0, 115),
+		UDim2.new(0, 8, 0, 138),
 		UDim2.new(1, -16, 0, 20),
 		11
 	)
@@ -1689,7 +1785,7 @@ local function criarPainelHitbox()
 	local btnNoSlow = criarBotaoPadrao(
 		pagCombat,
 		noSlowAtivo and "No Slow: ON" or "No Slow: OFF",
-		UDim2.new(0, 8, 0, 138),
+		UDim2.new(0, 8, 0, 161),
 		UDim2.new(1, -16, 0, 20),
 		11
 	)
@@ -1698,7 +1794,7 @@ local function criarPainelHitbox()
 	local btnKillAura = criarBotaoPadrao(
 		pagCombat,
 		killAuraAtivo and "Kill Aura (Q): ON" or "Kill Aura (Q): OFF",
-		UDim2.new(0, 8, 0, 161),
+		UDim2.new(0, 8, 0, 184),
 		UDim2.new(1, -16, 0, 20),
 		11
 	)
@@ -1707,7 +1803,7 @@ local function criarPainelHitbox()
 	local btnHit = criarBotaoPadrao(
 		pagCombat,
 		hitboxAtivo and "Hitbox: ON" or "Hitbox: OFF",
-		UDim2.new(0, 8, 0, 184),
+		UDim2.new(0, 8, 0, 207),
 		UDim2.new(0.5, -10, 0, 20),
 		10
 	)
@@ -1716,30 +1812,32 @@ local function criarPainelHitbox()
 	local btnVis = criarBotaoPadrao(
 		pagCombat,
 		hitboxVisivel and "Visivel: Sim" or "Visivel: Nao",
-		UDim2.new(0.5, 2, 0, 184),
+		UDim2.new(0.5, 2, 0, 207),
 		UDim2.new(0.5, -10, 0, 20),
 		10
 	)
 	btnVis.BackgroundColor3 = hitboxVisivel and BOTAO_ROXO_ON or BOTAO_CINZA
 
-	local sliderSize = criarSliderPadrao(pagCombat, "Size: ", 208, 3, HITBOX_MAX_SLIDER, hitboxSize, function(novoSize)
+	local sliderSize = criarSliderPadrao(pagCombat, "Size: ", 231, 3, HITBOX_MAX_SLIDER, hitboxSize, function(novoSize)
 		hitboxSize = novoSize
 		sincronizarHitboxEMarcadores()
 	end)
 
-	local boxAMG = criarCampoTextoPadrao(pagCombat, "AMG (ex: ana pedro)...", UDim2.new(0, 8, 0, 242), 19)
-	local boxFocus = criarCampoTextoPadrao(pagCombat, "Focus (ex: alvo1 alvo2)...", UDim2.new(0, 8, 0, 263), 19)
-	local boxBackFilter = criarCampoTextoPadrao(pagCombat, "Back / Costas (quem usar)...", UDim2.new(0, 8, 0, 284), 19)
+	local boxAMG = criarCampoTextoPadrao(pagCombat, "AMG (ex: ana pedro)...", UDim2.new(0, 8, 0, 265), 19)
+	local boxFocus = criarCampoTextoPadrao(pagCombat, "Focus (ex: alvo1 alvo2)...", UDim2.new(0, 8, 0, 286), 19)
+	local boxBackFilter = criarCampoTextoPadrao(pagCombat, "Back / Costas (quem usar)...", UDim2.new(0, 8, 0, 307), 19)
 
 	boxAMG:GetPropertyChangedSignal("Text"):Connect(function()
 		amgTexto = boxAMG.Text
 		alvoKillAuraPlayer = nil
+		alvoPvpLoopPlayer = nil
 		sincronizarHitboxEMarcadores()
 	end)
 
 	boxFocus:GetPropertyChangedSignal("Text"):Connect(function()
 		focusTexto = boxFocus.Text
 		alvoKillAuraPlayer = nil
+		alvoPvpLoopPlayer = nil
 		sincronizarHitboxEMarcadores()
 	end)
 
@@ -2000,6 +2098,16 @@ local function criarPainelHitbox()
 		end
 	end)
 
+	btnPvpLoop.MouseButton1Click:Connect(function()
+		pvpFocusLoopAtivo = not pvpFocusLoopAtivo
+		btnPvpLoop.Text = pvpFocusLoopAtivo and "PvP Focus Loop: ON" or "PvP Focus Loop: OFF"
+		btnPvpLoop.BackgroundColor3 = pvpFocusLoopAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
+		if not pvpFocusLoopAtivo then
+			alvoPvpLoopPlayer = nil
+		end
+		sincronizarHitboxEMarcadores()
+	end)
+
 	btnBackCostas.MouseButton1Click:Connect(function()
 		backCostasAtivo = not backCostasAtivo
 		btnBackCostas.Text = backCostasAtivo and "Back / Costas: ON" or "Back / Costas: OFF"
@@ -2133,6 +2241,12 @@ local function aplicarFocoNoAlvo()
 	local _, meuRoot = getCharAndRoot(LocalPlayer)
 	if not meuRoot then return end
 
+	if pvpFocusLoopAtivo then
+		local rLoop, _, dentroDoAlcance = obterAlvoPvpLoopRegistrado(meuRoot)
+		alvoAtual = (dentroDoAlcance and rLoop) or nil
+		return
+	end
+
 	local maisProximo, distMaisProximo = acharMaisProximo(meuRoot)
 	local distAtual = distanciaPara(meuRoot, alvoAtual)
 
@@ -2230,6 +2344,9 @@ end)
 Players.PlayerRemoving:Connect(function(plr)
 	if alvoKillAuraPlayer == plr then
 		alvoKillAuraPlayer = nil
+	end
+	if alvoPvpLoopPlayer == plr then
+		alvoPvpLoopPlayer = nil
 	end
 	limparMarcador(plr)
 end)
