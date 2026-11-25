@@ -1072,12 +1072,12 @@ local function cancelarAlvoPvpLoop()
 end
 
 -- ==========================================
--- PVP FOCUS LOOP (SO REGISTRA AO DAR HIT + MEMORIA ATE MORRER + CANCELAMENTO)
+-- PVP FOCUS LOOP (PRIMEIRO GOLPE LIVRE SEM HITBOX -> ATIVA HITBOX E FOCO NO ALVO)
 -- ==========================================
 local function obterRaioHitRegistro()
-	local raio = DISTANCIA_MAXIMA + 4
+	local raio = DISTANCIA_MAXIMA + 6
 	if hitboxAtivo then
-		raio = math.max(raio, hitboxSize + 8)
+		raio = math.max(raio, hitboxSize + 10)
 	end
 	return raio
 end
@@ -1112,8 +1112,7 @@ local function registrarAlvoPvpPorHit()
 			if r and hum and hum.Health > 0 then
 				local delta = r.Position - meuRoot.Position
 				local dist = delta.Magnitude
-				local margemExtra = hitboxAtivo and (hitboxSize * 0.5) or 0
-				if dist <= (raioHit + margemExtra) and dist > 0.1 then
+				if dist <= raioHit and dist > 0.1 then
 					local penalidadeAngulo = 0
 					if lookPlano.Magnitude > 0.1 then
 						local dirPlano = Vector3.new(delta.X, 0, delta.Z)
@@ -1158,6 +1157,9 @@ local function obterAlvoPvpLoopRegistrado(meuRoot)
 	local _, rAtual, humAtual = getCharAndRoot(alvoPvpLoopPlayer)
 	if not (rAtual and humAtual and humAtual.Health > 0) then
 		alvoPvpLoopPlayer = nil
+		if sincronizarHitboxEMarcadores then
+			pcall(sincronizarHitboxEMarcadores)
+		end
 		return nil, nil, false
 	end
 
@@ -1523,11 +1525,17 @@ sincronizarHitboxEMarcadores = function()
 				local isFocus = (not isAMG) and temFiltroFocusAtivo() and ehAlvoFocus(plr)
 
 				local deveExpandir = hitboxAtivo and jogadorElegivelComoAlvo(plr)
-				if deveExpandir and pvpFocusLoopAtivo and not temFiltroFocusAtivo() then
-					if plrLoopFocado and dentroLoop then
-						deveExpandir = (plr == plrLoopFocado)
+				if deveExpandir and pvpFocusLoopAtivo then
+					if not temFiltroFocusAtivo() then
+						if plrLoopFocado and dentroLoop then
+							deveExpandir = (plr == plrLoopFocado)
+						else
+							deveExpandir = false
+						end
 					else
-						deveExpandir = false
+						if not (plrLoopFocado and dentroLoop and plr == plrLoopFocado) then
+							deveExpandir = false
+						end
 					end
 				end
 
