@@ -24,6 +24,7 @@ local TECLA_ATALHO = Enum.KeyCode.E
 local TECLA_KILL_AURA = Enum.KeyCode.Q
 local TECLA_PAINEL = Enum.KeyCode.J
 local TECLA_ESPECIAL = Enum.KeyCode.G
+local TECLA_CANCELAR_PVP_LOOP = Enum.KeyCode.R
 local JANELA_ESPECIAL_SEG = 1.2
 
 local DISTANCIA_MAXIMA = 22
@@ -137,6 +138,7 @@ local yawAplicadoNoPulso = nil
 local ultimaPosicaoMorte = nil
 local morteRegistradaNestaVida = false
 local snapshotGraficoSalvo = nil
+local ignorarProximoDisparoHit = false
 
 local btnKillAuraUI
 local btnAutoClickUI
@@ -1056,15 +1058,90 @@ local function acharMaisProximoGeral(meuRoot, raioMax, filtroExtra)
 	return melhorRoot, menorDist
 end
 
+local sincronizarHitboxEMarcadores
+
+local function cancelarAlvoPvpLoop()
+	alvoPvpLoopPlayer = nil
+	alvoAtual = nil
+	if alvoKillAuraPlayer and pvpFocusLoopAtivo then
+		alvoKillAuraPlayer = nil
+	end
+	if sincronizarHitboxEMarcadores then
+		pcall(sincronizarHitboxEMarcadores)
+	end
+end
+
 -- ==========================================
--- PVP FOCUS LOOP (MEMORIA DO ALVO ATE MORRER + ALCANCE LONGO DO HITBOX)
+-- PVP FOCUS LOOP (SO REGISTRA AO DAR HIT + MEMORIA ATE MORRER + CANCELAMENTO)
 -- ==========================================
-local function obterRaioPvpLoop()
-	local raio = DISTANCIA_MAXIMA
+local function obterRaioHitRegistro()
+	local raio = DISTANCIA_MAXIMA + 4
 	if hitboxAtivo then
 		raio = math.max(raio, hitboxSize + 8)
 	end
 	return raio
+end
+
+local function registrarAlvoPvpPorHit()
+	if not pvpFocusLoopAtivo then return nil end
+	local _, meuRoot = getCharAndRoot(LocalPlayer)
+	if not meuRoot then return nil end
+
+	if alvoPvpLoopPlayer and alvoPvpLoopPlayer.Parent == Players and jogadorElegivelComoAlvo(alvoPvpLoopPlayer) then
+		local _, rAtual, humAtual = getCharAndRoot(alvoPvpLoopPlayer)
+		if rAtual and humAtual and humAtual.Health > 0 then
+			return alvoPvpLoopPlayer
+		end
+		alvoPvpLoopPlayer = nil
+	end
+
+	local raioHit = obterRaioHitRegistro()
+	local lookPlano = Vector3.new(meuRoot.CFrame.LookVector.X, 0, meuRoot.CFrame.LookVector.Z)
+	if lookPlano.Magnitude > 0.001 then
+		lookPlano = lookPlano.Unit
+	else
+		lookPlano = Vector3.zero
+	end
+
+	local melhorPlr = nil
+	local melhorScore = math.huge
+
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if jogadorElegivelComoAlvo(plr) then
+			local _, r, hum = getCharAndRoot(plr)
+			if r and hum and hum.Health > 0 then
+				local delta = r.Position - meuRoot.Position
+				local dist = delta.Magnitude
+				local margemExtra = hitboxAtivo and (hitboxSize * 0.5) or 0
+				if dist <= (raioHit + margemExtra) and dist > 0.1 then
+					local penalidadeAngulo = 0
+					if lookPlano.Magnitude > 0.1 then
+						local dirPlano = Vector3.new(delta.X, 0, delta.Z)
+						if dirPlano.Magnitude > 0.01 then
+							local dot = lookPlano:Dot(dirPlano.Unit)
+							if dot < 0.25 then
+								penalidadeAngulo = (0.25 - dot) * 18
+							end
+						end
+					end
+					local score = dist + penalidadeAngulo
+					if score < melhorScore then
+						melhorScore = score
+						melhorPlr = plr
+					end
+				end
+			end
+		end
+	end
+
+	if melhorPlr then
+		alvoPvpLoopPlayer = melhorPlr
+		if sincronizarHitboxEMarcadores then
+			pcall(sincronizarHitboxEMarcadores)
+		end
+	end
+
+	return melhorPlr
 end
 
 local function obterAlvoPvpLoopRegistrado(meuRoot)
@@ -1073,41 +1150,22 @@ local function obterAlvoPvpLoopRegistrado(meuRoot)
 		return nil, nil, false
 	end
 
-	local raioBase = obterRaioPvpLoop()
-
-	-- Se ja ha um alvo registrado, mantem ele vivo mesmo se sair temporariamente do alcance
-	if alvoPvpLoopPlayer and alvoPvpLoopPlayer.Parent == Players and jogadorElegivelComoAlvo(alvoPvpLoopPlayer) then
-		local _, rAtual, humAtual = getCharAndRoot(alvoPvpLoopPlayer)
-		if rAtual and humAtual and humAtual.Health > 0 then
-			local distAtual = (rAtual.Position - meuRoot.Position).Magnitude
-			local dentroDoAlcance = (distAtual <= raioBase and distAtual > 0.1)
-			return rAtual, alvoPvpLoopPlayer, dentroDoAlcance
-		end
-		-- Morreu ou perdeu root/hum valido -> limpa e libera para o proximo
+	if not (alvoPvpLoopPlayer and alvoPvpLoopPlayer.Parent == Players and jogadorElegivelComoAlvo(alvoPvpLoopPlayer)) then
 		alvoPvpLoopPlayer = nil
+		return nil, nil, false
 	end
 
-	-- Sem alvo registrado: escolhe o elegivel mais proximo dentro do alcance
-	local melhorRoot = nil
-	local melhorPlr = nil
-	local menorDist = raioBase
-
-	for _, plr in ipairs(Players:GetPlayers()) do
-		if jogadorElegivelComoAlvo(plr) then
-			local _, r, hum = getCharAndRoot(plr)
-			if r and hum and hum.Health > 0 then
-				local d = (r.Position - meuRoot.Position).Magnitude
-				if d <= raioBase and d > 0.1 and d < menorDist then
-					menorDist = d
-					melhorRoot = r
-					melhorPlr = plr
-				end
-			end
-		end
+	local _, rAtual, humAtual = getCharAndRoot(alvoPvpLoopPlayer)
+	if not (rAtual and humAtual and humAtual.Health > 0) then
+		alvoPvpLoopPlayer = nil
+		return nil, nil, false
 	end
 
-	alvoPvpLoopPlayer = melhorPlr
-	return melhorRoot, melhorPlr, (melhorRoot ~= nil)
+	local raioBase = obterRaioHitRegistro()
+	local distAtual = (rAtual.Position - meuRoot.Position).Magnitude
+	local margemExtra = hitboxAtivo and (hitboxSize * 0.5) or 0
+	local dentroDoAlcance = (distAtual <= (raioBase + margemExtra) and distAtual > 0.1)
+	return rAtual, alvoPvpLoopPlayer, dentroDoAlcance
 end
 
 -- ==========================================
@@ -1279,6 +1337,7 @@ local function haAlvoNoAlcanceAutoClick(meuRoot)
 end
 
 local function executarCliqueRapido()
+	ignorarProximoDisparoHit = true
 	if typeof(mouse1click) == "function" then
 		pcall(mouse1click)
 	else
@@ -1287,6 +1346,9 @@ local function executarCliqueRapido()
 			VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
 		end)
 	end
+	task.defer(function()
+		ignorarProximoDisparoHit = false
+	end)
 end
 
 local function dispararPulsoAtaque(char, meuRoot)
@@ -1443,7 +1505,7 @@ local function garantirMarcador(plr, root)
 	return m
 end
 
-local function sincronizarHitboxEMarcadores()
+sincronizarHitboxEMarcadores = function()
 	local rootsAtivos = {}
 	local transpAlvo = hitboxVisivel and HITBOX_TRANSPARENCIA_VISIVEL or 1
 	local assinaturaAlvo = string.format("%d|%.4f", hitboxSize, transpAlvo)
@@ -1633,8 +1695,8 @@ end
 
 local function criarPainelHitbox()
 	if not parentGui then return end
-	local antigo = parentGui:FindFirstChild("UniversalCombatPanel")
-	if antigo then antigo:Destroy() end
+	local antiga = parentGui:FindFirstChild("UniversalCombatPanel")
+	if antiga then antigo:Destroy() end
 
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "UniversalCombatPanel"
@@ -1830,14 +1892,15 @@ local function criarPainelHitbox()
 	boxAMG:GetPropertyChangedSignal("Text"):Connect(function()
 		amgTexto = boxAMG.Text
 		alvoKillAuraPlayer = nil
-		alvoPvpLoopPlayer = nil
+		if alvoPvpLoopPlayer and ehAmigoAMG(alvoPvpLoopPlayer) then
+			alvoPvpLoopPlayer = nil
+		end
 		sincronizarHitboxEMarcadores()
 	end)
 
 	boxFocus:GetPropertyChangedSignal("Text"):Connect(function()
 		focusTexto = boxFocus.Text
 		alvoKillAuraPlayer = nil
-		alvoPvpLoopPlayer = nil
 		sincronizarHitboxEMarcadores()
 	end)
 
@@ -2011,7 +2074,7 @@ local function criarPainelHitbox()
 	infoAtalhos.Size = UDim2.new(1, -16, 0, 88)
 	infoAtalhos.Position = UDim2.new(0, 8, 0, 66)
 	infoAtalhos.BackgroundTransparency = 1
-	infoAtalhos.Text = "AutoClick: E\nKill Aura: Q\nPainel: J\nOtimizar corta efeitos/sombras.\nPing depende da rota/servidor."
+	infoAtalhos.Text = "AutoClick: E\nKill Aura: Q\nPainel: J\nCancelar PvP Loop: R / RMB\nOtimizar corta efeitos/sombras."
 	infoAtalhos.TextColor3 = Color3.fromRGB(190, 190, 205)
 	infoAtalhos.TextWrapped = true
 	infoAtalhos.Font = Enum.Font.GothamMedium
@@ -2102,9 +2165,8 @@ local function criarPainelHitbox()
 		pvpFocusLoopAtivo = not pvpFocusLoopAtivo
 		btnPvpLoop.Text = pvpFocusLoopAtivo and "PvP Focus Loop: ON" or "PvP Focus Loop: OFF"
 		btnPvpLoop.BackgroundColor3 = pvpFocusLoopAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
-		if not pvpFocusLoopAtivo then
-			alvoPvpLoopPlayer = nil
-		end
+		alvoPvpLoopPlayer = nil
+		alvoAtual = nil
 		sincronizarHitboxEMarcadores()
 	end)
 
@@ -2279,6 +2341,8 @@ end
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if gameProcessed then return end
+	if UserInputService:GetFocusedTextBox() then return end
+
 	if input.KeyCode == TECLA_ESPECIAL then
 		ultimoEspecialTick = os.clock()
 	elseif input.KeyCode == TECLA_KILL_AURA then
@@ -2287,6 +2351,18 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		setEstado(not ativo)
 	elseif input.KeyCode == TECLA_PAINEL and painelFrameUI then
 		painelFrameUI.Visible = not painelFrameUI.Visible
+	elseif input.KeyCode == TECLA_CANCELAR_PVP_LOOP then
+		if pvpFocusLoopAtivo and alvoPvpLoopPlayer then
+			cancelarAlvoPvpLoop()
+		end
+	elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
+		if pvpFocusLoopAtivo and alvoPvpLoopPlayer then
+			cancelarAlvoPvpLoop()
+		end
+	elseif input.UserInputType == Enum.UserInputType.MouseButton1 and not ignorarProximoDisparoHit then
+		if pvpFocusLoopAtivo and not alvoPvpLoopPlayer then
+			task.defer(registrarAlvoPvpPorHit)
+		end
 	end
 end)
 
