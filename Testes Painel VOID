@@ -32,34 +32,34 @@ local CFG = {
 	KEY_ESPECIAL = Enum.KeyCode.G,
 	KEY_CANCEL_PVP = Enum.KeyCode.R,
 	JANELA_ESP = 1.2,
-	DIST_MAX = EH_HIGHSCHOOL_RP and 22 or 24,
+	DIST_MAX = EH_HIGHSCHOOL_RP and 20 or 22,
 	MARGEM_TROCA = 4.0,
 	FIRMEZA_GIRO = 1.0,
 	ORBITAR = false,
 	DIST_COSTAS = 3.2,
 	DIST_MAX_COSTAS = 45,
-	DIST_KA = EH_HIGHSCHOOL_RP and 22 or 24,
+	DIST_KA = EH_HIGHSCHOOL_RP and 18 or 20,
 	MARGEM_KA = 6,
-	DELAY_KA_NORM = 0.055,
+	DELAY_KA_NORM = 0.05,
 	RAJADA_KA_NORM = 1,
-	DELAY_CLK_NORM = 0.05,
-	DELAY_KA_INV = 0.06,
+	DELAY_CLK_NORM = 0.045,
+	DELAY_KA_INV = 0.055,
 	RAJADA_KA_INV = 1,
-	DELAY_CLK_INV = 0.055,
+	DELAY_CLK_INV = 0.05,
 	KA_PULSO = false,
 	DUR_PULSO = 0.015,
 	AUTOCLICK_JUNTO = true,
 	WS_BASE = 16,
 	JP_BASE = 50,
 	JP_FATOR = 0.08,
-	INV_PROF = 4.18,
+	INV_PROF = 4.15,
 	COR_PISO = Color3.fromRGB(196, 154, 108),
 	SPEED_MIN = 1,
 	SPEED_MAX = 200,
 	MODOS_SPEED = { "CFrame", "WalkSpeed", "AssemblyVel", "Hybrid (CF+WS)" },
 	JUMP_MIN = 1,
 	JUMP_MAX = 1000,
-	HIT_DEF = 24,
+	HIT_DEF = 22,
 	HIT_MAX = 30,
 	HIT_TRANS = 0.965,
 	COR_HIT = Color3.fromRGB(220, 55, 55),
@@ -520,7 +520,7 @@ local function aplFioInv(ch, on, tam)
 				elseif d:IsA("BasePart") then
 					if tam then
 						if snapInv.size[d] == nil then snapInv.size[d] = d.Size end
-						local sz = (d.Name == "HumanoidRootPart") and Vector3.new(0.002, 0.001, 0.002) or Vector3.new(0.001, 0.001, 0.001)
+						local sz = (d.Name == "HumanoidRootPart") and Vector3.new(0.05, 0.05, 0.05) or Vector3.new(0.01, 0.01, 0.01)
 						if d.Size ~= sz then pcall(function() d.Size = sz end) end
 					end
 					if snapInv.transp[d] == nil then snapInv.transp[d] = d.LocalTransparencyModifier end
@@ -1072,7 +1072,7 @@ end
 
 local function getRaioEfetivoKa()
 	if S.hitOn then
-		return math.max(CFG.DIST_KA, S.hitSize + 4)
+		return math.max(CFG.DIST_KA, S.hitSize + 3)
 	end
 	return CFG.DIST_KA
 end
@@ -1086,7 +1086,6 @@ local function alvoValidoKa(plr, mr, limMax)
 	return r, d
 end
 
--- Trava firme no alvo do PvP ate ele morrer, sair, fugir alem do limite ou o Kill Aura ser desligado
 local function getAlvoKa(mr, rMax, now)
 	if not S.ka or not mr then
 		S.alvoKa, S.kaLockPlr = nil, nil
@@ -1159,9 +1158,10 @@ end
 
 local function temAlvoClk(mr)
 	if not mr then return false end
-	if S.ka and (S.kaLockPlr or S.alvoKa) then
-		local rt = alvoValidoKa(S.kaLockPlr or S.alvoKa, mr, getRaioEfetivoKa() + CFG.MARGEM_KA + 14)
-		return rt ~= nil
+	if S.ka then
+		local plr = S.kaLockPlr or S.alvoKa
+		if not plr then return false end
+		return alvoValidoKa(plr, mr, getRaioEfetivoKa() + CFG.MARGEM_KA + 14) ~= nil
 	end
 	if S.pvpLoop then
 		local rl, _, ok = getPvpAlvo(mr)
@@ -1221,7 +1221,6 @@ local function procKa(now)
 		return false
 	end
 
-	-- Mantem o personagem virado diretamente para o alvo travado no PvP
 	if not S.inv and not CFG.ORBITAR then
 		local dx, dz = alvo.Position.X - mr.Position.X, alvo.Position.Z - mr.Position.Z
 		if (dx * dx + dz * dz) > 0.01 then
@@ -1360,9 +1359,6 @@ syncHitMarc = function()
 	for plr in pairs(marcPlr) do if plr.Parent ~= Players then limpMarc(plr) end end
 end
 
--- ==========================================
--- MODULO ISOLADO: VOID ESP (NAME + HEALTH + BODY)
--- ==========================================
 do
 	local function corVida(pct)
 		local p = math.clamp(pct, 0, 1)
