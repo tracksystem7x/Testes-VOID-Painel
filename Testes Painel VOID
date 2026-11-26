@@ -620,11 +620,7 @@ local function setKa(on)
 	if (now - tToggleKa) < 0.05 and on ~= S.ka then return end
 	tToggleKa = now
 	S.ka = on
-	if not S.ka then
-		S.alvoKa, S.kaLockPlr, pulsoAte, yawAntes, yawPulso = nil, nil, 0, nil, nil
-	else
-		S.alvoKa, S.kaLockPlr = nil, nil
-	end
+	S.alvoKa, S.kaLockPlr, pulsoAte, yawAntes, yawPulso = nil, nil, 0, nil, nil
 	updKaUI(S.ka)
 end
 
@@ -1430,7 +1426,7 @@ local syncHitMarc
 
 local function cancPvp()
 	S.alvoPvp, S.alvo, S.tJanelaHit = nil, nil, 0
-	if S.alvoKa and S.pvpLoop then S.alvoKa, S.kaLockPlr = nil, nil end
+	if S.pvpLoop then S.alvoKa, S.kaLockPlr = nil, nil end
 	if syncHitMarc then pcall(syncHitMarc) end
 end
 
@@ -1537,11 +1533,30 @@ local function updCacheAlvos(now, mr, rMax)
 end
 
 -- ==========================================
--- FIX ISOLADO KILL AURA: TRAVA NO ALVO ATE O FIM
--- SEM ALTERAR DELAYS OU OUTRAS FUNCOES
+-- FIX DEFINITIVO KILL AURA:
+-- 1) TRAVA NO ALVO ESCOLHIDO / MAIS PROXIMO ATE MORRER, SAIR OU DESLIGAR KA
+-- 2) NAO PERDE O ALVO QUANDO HA 2+ PESSOAS OU QUANDO ELE CAI
+-- 3) NAO ATIRA NO VAZIO ("GHOST") QUANDO NAO HA ALVO VALIDO
 -- ==========================================
+local function alvoKaValido(plr, mr, limMant)
+	if not plr or plr.Parent ~= Players or not elegivel(plr) then return nil, nil end
+	local ch = plr.Character
+	if not ch or not ch.Parent then return nil, nil end
+	local h = ch:FindFirstChildOfClass("Humanoid")
+	local r = ch:FindFirstChild("HumanoidRootPart") or ch.PrimaryPart
+	if not h or not r or not r.Parent or h.Health <= 0 then return nil, nil end
+	local orig = (S.inv and S.posInv) or mr.Position
+	local dist = (r.Position - orig).Magnitude
+	-- Margem extra generosa para alvos caidos / em ragdoll / empurrados no PvP
+	local tolExtra = caido(h) and 14 or 6
+	if dist <= (limMant + tolExtra) and dist > 0.05 then
+		return r, plr
+	end
+	return nil, nil
+end
+
 local function getAlvoKa(mr, rMax, now)
-	if not mr then
+	if not S.ka or not mr then
 		S.alvoKa, S.kaLockPlr = nil, nil
 		return nil, nil
 	end
@@ -1555,40 +1570,46 @@ local function getAlvoKa(mr, rMax, now)
 		return nil, nil
 	end
 
-	local orig = (S.inv and S.posInv) or mr.Position
 	local mEx = S.hitOn and (S.hitSize * 0.5) or 0
-	local limMant = rMax + CFG.MARGEM_KA + mEx
 	local limBusca = rMax + mEx
+	local limMant = limBusca + CFG.MARGEM_KA
 
-	-- Se ja ha um alvo travado para este PvP no Kill Aura, mantem ele ate o fim
-	-- (morrer, sair do jogo, ficar inelegivel ou sair do alcance) sem trocar por terceiros
+	-- Se ja ha um alvo travado para este PvP no Kill Aura, mantem ele ATE O FIM
+	-- (so troca se morrer, sair do jogo, virar AMG ou voce desligar/ligar o Kill Aura)
 	local travado = S.kaLockPlr or S.alvoKa
-	if travado and travado.Parent == Players and elegivel(travado) then
-		local _, rt, ht = getCR(travado)
-		if rt and rt.Parent and ht and ht.Health > 0 then
-			local dt = (rt.Position - orig).Magnitude
-			if dt <= limMant and dt > 0.1 then
-				S.alvoKa, S.kaLockPlr = travado, travado
-				return rt, travado
+	if travado then
+		local rLock, pLock = alvoKaValido(travado, mr, limMant)
+		if rLock and pLock then
+			S.alvoKa, S.kaLockPlr = pLock, pLock
+			return rLock, pLock
+		end
+		-- Se o alvo travado ainda esta vivo e no servidor mas afastou um pouco, so solta se realmente saiu da arena/alcance largo
+		if travado.Parent == Players and elegivel(travado) and travado.Character then
+			local hL = travado.Character:FindFirstChildOfClass("Humanoid")
+			local rL = travado.Character:FindFirstChild("HumanoidRootPart") or travado.Character.PrimaryPart
+			if hL and hL.Health > 0 and rL and rL.Parent then
+				local dL = (rL.Position - ((S.inv and S.posInv) or mr.Position)).Magnitude
+				if dL <= (limMant + 22) then
+					S.alvoKa, S.kaLockPlr = travado, travado
+					return rL, travado
+				end
 			end
 		end
+		S.alvoKa, S.kaLockPlr = nil, nil
 	end
 
-	-- Alvo anterior morreu, saiu ou ficou fora: libera trava e escolhe o proximo
-	S.alvoKa, S.kaLockPlr = nil, nil
+	-- Nenhum alvo travado: escolhe o mais proximo elegivel
 	updCacheAlvos(now, mr, rMax)
+	local orig = (S.inv and S.posInv) or mr.Position
+	local bestR, bestP, bestD = nil, nil, math.huge
 
-	local bestR, bestP, bestS = nil, nil, math.huge
 	for _, it in ipairs(S.cacheAlvos) do
 		if it.plr and it.plr.Parent == Players and elegivel(it.plr) and it.root and it.root.Parent and it.hum and it.hum.Health > 0 then
 			local d = (it.root.Position - orig).Magnitude
-			if d <= limBusca and d > 0.1 then
-				local sc = d + (caido(it.hum) and -12 or 0)
-				if sc < bestS then
-					bestS = sc
-					bestR = it.root
-					bestP = it.plr
-				end
+			if d <= limBusca and d > 0.05 and d < bestD then
+				bestD = d
+				bestR = it.root
+				bestP = it.plr
 			end
 		end
 	end
@@ -1599,21 +1620,23 @@ local function getAlvoKa(mr, rMax, now)
 				local _, r, h = getCR(plr)
 				if r and r.Parent and h and h.Health > 0 then
 					local d = (r.Position - orig).Magnitude
-					if d <= limBusca and d > 0.1 then
-						local sc = d + (caido(h) and -12 or 0)
-						if sc < bestS then
-							bestS = sc
-							bestR = r
-							bestP = plr
-						end
+					if d <= limBusca and d > 0.05 and d < bestD then
+						bestD = d
+						bestR = r
+						bestP = plr
 					end
 				end
 			end
 		end
 	end
 
-	S.alvoKa, S.kaLockPlr = bestP, bestP
-	return bestR, bestP
+	if bestR and bestP then
+		S.alvoKa, S.kaLockPlr = bestP, bestP
+		return bestR, bestP
+	end
+
+	S.alvoKa, S.kaLockPlr = nil, nil
+	return nil, nil
 end
 
 local function aplCostas()
@@ -1714,7 +1737,7 @@ local function procKa(now)
 	local raj = S.inv and CFG.RAJADA_KA_INV or CFG.RAJADA_KA_NORM
 	for i = 1, raj do
 		local _, raChk, haChk = getCR(plrAlvo)
-		if not raChk or not haChk or haChk.Health <= 0 or plrAlvo.Parent ~= Players then
+		if not raChk or not haChk or haChk.Health <= 0 or plrAlvo.Parent ~= Players or not elegivel(plrAlvo) then
 			S.alvoKa, S.kaLockPlr = nil, nil
 			break
 		end
@@ -2132,8 +2155,8 @@ local function criarPainel()
 	local bxFoc = mkBox(pC, "Focus (ex: alvo1 alvo2)...", UDim2.new(0, 8, 0, 288), 19)
 	local bxBck = mkBox(pC, "Back / Costas (quem usar)...", UDim2.new(0, 8, 0, 309), 19)
 
-	bxAmg:GetPropertyChangedSignal("Text"):Connect(function() S.amg = bxAmg.Text; S.alvoKa, S.kaLockPlr = nil, nil; if S.alvoPvp and ehAmg(S.alvoPvp) then S.alvoPvp = nil end; syncHitMarc() end)
-	bxFoc:GetPropertyChangedSignal("Text"):Connect(function() S.focus = bxFoc.Text; S.alvoKa, S.kaLockPlr = nil, nil; syncHitMarc() end)
+	bxAmg:GetPropertyChangedSignal("Text"):Connect(function() S.amg = bxAmg.Text; if S.kaLockPlr and ehAmg(S.kaLockPlr) then S.alvoKa, S.kaLockPlr = nil, nil end; if S.alvoPvp and ehAmg(S.alvoPvp) then S.alvoPvp = nil end; syncHitMarc() end)
+	bxFoc:GetPropertyChangedSignal("Text"):Connect(function() S.focus = bxFoc.Text; if S.kaLockPlr and not ehFocus(S.kaLockPlr) then S.alvoKa, S.kaLockPlr = nil, nil end; syncHitMarc() end)
 	bxBck:GetPropertyChangedSignal("Text"):Connect(function() S.backFilt = bxBck.Text end)
 
 	local pM = tPags.Move
