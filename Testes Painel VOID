@@ -33,34 +33,35 @@ local CFG = {
 	KEY_CANCEL_PVP = Enum.KeyCode.R,
 	JANELA_ESP = 1.2,
 	DIST_MAX = EH_HIGHSCHOOL_RP and 20 or 22,
-	MARGEM_TROCA = 4.0,
+	DIST_GRAB_ASSIST = 22,
+	MARGEM_TROCA = 3.5,
 	FIRMEZA_GIRO = 1.0,
 	ORBITAR = false,
 	DIST_COSTAS = 3.2,
 	DIST_MAX_COSTAS = 45,
-	DIST_KA = EH_HIGHSCHOOL_RP and 18 or 20,
-	MARGEM_KA = 6,
+	DIST_KA = EH_HIGHSCHOOL_RP and 28 or 32,
+	MARGEM_KA = 8,
 	DELAY_KA_NORM = 0.008,
-	RAJADA_KA_NORM = 2,
-	DELAY_CLK_NORM = 0.001,
-	DELAY_KA_INV = 0.055,
-	RAJADA_KA_INV = 1,
-	DELAY_CLK_INV = 0.05,
+	RAJADA_KA_NORM = 3,
+	DELAY_CLK_NORM = 0.0001,
+	DELAY_KA_INV = 0.02,
+	RAJADA_KA_INV = 4,
+	DELAY_CLK_INV = 0.02,
 	KA_PULSO = false,
-	DUR_PULSO = 0.015,
+	DUR_PULSO = 0.008,
 	AUTOCLICK_JUNTO = true,
 	WS_BASE = 16,
 	JP_BASE = 50,
 	JP_FATOR = 0.08,
-	INV_PROF = 4.1,
+	INV_PROF = 4.18,
 	COR_PISO = Color3.fromRGB(196, 154, 108),
 	SPEED_MIN = 1,
 	SPEED_MAX = 200,
 	MODOS_SPEED = { "CFrame", "WalkSpeed", "AssemblyVel", "Hybrid (CF+WS)" },
 	JUMP_MIN = 1,
 	JUMP_MAX = 1000,
-	HIT_DEF = 22,
-	HIT_MAX = 30,
+	HIT_DEF = 12,
+	HIT_MAX = 27,
 	HIT_TRANS = 0.965,
 	COR_HIT = Color3.fromRGB(220, 55, 55),
 	ROXO = Color3.fromRGB(155, 65, 255),
@@ -75,20 +76,17 @@ if getgenv then
 	getgenv().UniversalTargetLockActive = false
 end
 
--- Alvo persistente unico de combate/Kill Aura (evita dispersar para outros jogadores)
-local currentTarget = nil
-
 local S = {
 	ativo = false,
 	lockOn = true,
 	pvpLoop = false,
 	backCostas = false,
+	grabAssist = true,
 	antiRag = EH_HIGHSCHOOL_RP and true or false,
 	antiGrab = EH_HIGHSCHOOL_RP and true or false,
 	deathTp = false,
 	noSlow = false,
 	ka = false,
-	kaLockPlr = nil,
 	fighting = false,
 	noAnim = false,
 	inv = false,
@@ -167,29 +165,13 @@ local function updKaUI(on)
 	if UI.kaStr then UI.kaStr.Color = on and Color3.fromRGB(70, 225, 120) or CFG.ROXO end
 end
 
-local function clearCurrentTarget()
-	currentTarget = nil
-	S.alvoKa = nil
-	S.kaLockPlr = nil
-	S.alvoPvp = nil
-	S.alvo = nil
-end
-
-local function setCurrentTarget(plr)
-	currentTarget = plr
-	S.alvoKa = plr
-	S.kaLockPlr = plr
-	if S.pvpLoop then S.alvoPvp = plr end
-end
-
 local function setKa(on)
 	local now = os.clock()
 	if (now - tToggleKa) < 0.05 and on ~= S.ka then return end
 	tToggleKa = now
 	S.ka = on
-	pulsoAte, yawAntes, yawPulso = 0, nil, nil
-	if not on and not S.pvpLoop then
-		clearCurrentTarget()
+	if not S.ka then
+		S.alvoKa, pulsoAte, yawAntes, yawPulso = nil, 0, nil, nil
 	end
 	updKaUI(S.ka)
 end
@@ -541,7 +523,7 @@ local function aplFioInv(ch, on, tam)
 				elseif d:IsA("BasePart") then
 					if tam then
 						if snapInv.size[d] == nil then snapInv.size[d] = d.Size end
-						local sz = (d.Name == "HumanoidRootPart") and Vector3.new(0.05, 0.05, 0.05) or Vector3.new(0.01, 0.01, 0.01)
+						local sz = (d.Name == "HumanoidRootPart") and Vector3.new(0.002, 0.001, 0.002) or Vector3.new(0.001, 0.001, 0.001)
 						if d.Size ~= sz then pcall(function() d.Size = sz end) end
 					end
 					if snapInv.transp[d] == nil then snapInv.transp[d] = d.LocalTransparencyModifier end
@@ -734,8 +716,7 @@ local function monMorte(ch)
 end
 
 local function recQueda(nc)
-	clearCurrentTarget()
-	S.posInv, S.cacheChar = nil, nil
+	S.alvo, S.alvoPvp, S.alvoKa, S.posInv, S.cacheChar = nil, nil, nil, nil, nil
 	destAnc()
 	limpSnapInv()
 	syncCamInv(nc and nc:FindFirstChildOfClass("Humanoid"), nil)
@@ -812,11 +793,11 @@ local function getCR(plr)
 	return ch, ch:FindFirstChild("HumanoidRootPart") or ch.PrimaryPart, h
 end
 
-local function getOrigRef(mr)
-	if S.inv and S.posInv then
-		return S.posInv
-	end
-	return mr.Position
+local function caido(h)
+	if not h or h.Health <= 0 then return false end
+	if h.PlatformStand then return true end
+	local ok, st = pcall(function() return h:GetState() end)
+	return ok and (st == Enum.HumanoidStateType.Ragdoll or st == Enum.HumanoidStateType.FallingDown or st == Enum.HumanoidStateType.Physics)
 end
 
 local function aplNoSlow()
@@ -980,13 +961,12 @@ local function normAng(a)
 end
 
 local function maisProx(mr, rMax, extra)
-	local orig = getOrigRef(mr)
 	local best, md = nil, rMax
 	for _, plr in ipairs(Players:GetPlayers()) do
 		if elegivel(plr) and (not extra or extra(plr)) then
 			local _, r = getCR(plr)
 			if r then
-				local d = (r.Position - orig).Magnitude
+				local d = (r.Position - mr.Position).Magnitude
 				if d <= rMax and d > 0.1 and d < md then md = d; best = r end
 			end
 		end
@@ -997,81 +977,147 @@ end
 local syncHitMarc
 
 local function cancPvp()
-	clearCurrentTarget()
-	S.tJanelaHit = 0
+	S.alvoPvp, S.alvo, S.tJanelaHit = nil, nil, 0
+	if S.alvoKa and S.pvpLoop then S.alvoKa = nil end
 	if syncHitMarc then pcall(syncHitMarc) end
 end
 
 local function raioHitReg()
-	local r = CFG.DIST_MAX + 6
-	return S.hitOn and math.max(r, S.hitSize + 6) or r
-end
-
-local function alvoValidoPers(plr, mr, limMax)
-	if not plr or plr.Parent ~= Players or not elegivel(plr) then return nil end
-	local _, r, h = getCR(plr)
-	if not r or not r.Parent or not h or h.Health <= 0 then return nil end
-	if mr then
-		local d = (r.Position - getOrigRef(mr)).Magnitude
-		if d > limMax or d <= 0.05 then return nil end
-		return r, d
-	end
-	return r, 0
+	local r = CFG.DIST_MAX + 10
+	return S.hitOn and math.max(r, S.hitSize + 14) or r
 end
 
 local function regPvpHit()
 	if not S.pvpLoop then return nil end
 	local _, mr = getCR(LocalPlayer)
 	if not mr then return nil end
-
-	-- Nao substitui o alvo atual enquanto ele continuar valido
-	local pers = currentTarget or S.alvoPvp
-	if pers then
-		local rp = alvoValidoPers(pers, mr, raioHitReg() + CFG.MARGEM_KA + 18)
-		if rp then
-			setCurrentTarget(pers)
-			return pers
-		end
-		clearCurrentTarget()
+	if S.alvoPvp and S.alvoPvp.Parent == Players and elegivel(S.alvoPvp) then
+		local _, ra, ha = getCR(S.alvoPvp)
+		if ra and ha and ha.Health > 0 then return S.alvoPvp end
+		S.alvoPvp = nil
 	end
-
-	local orig = getOrigRef(mr)
 	local rh = raioHitReg()
+	local lp = Vector3.new(mr.CFrame.LookVector.X, 0, mr.CFrame.LookVector.Z)
+	lp = lp.Magnitude > 0.001 and lp.Unit or Vector3.zero
 	local best, ms = nil, math.huge
 	for _, plr in ipairs(Players:GetPlayers()) do
 		if elegivel(plr) then
 			local _, r, h = getCR(plr)
 			if r and h and h.Health > 0 then
-				local dist = (r.Position - orig).Magnitude
-				if dist <= rh and dist > 0.1 and dist < ms then ms = dist; best = plr end
+				local dl = r.Position - mr.Position
+				local dist = dl.Magnitude
+				if dist <= rh and dist > 0.1 then
+					local pen = 0
+					if lp.Magnitude > 0.1 then
+						local dp = Vector3.new(dl.X, 0, dl.Z)
+						if dp.Magnitude > 0.01 then
+							local dot = lp:Dot(dp.Unit)
+							if dot < 0.05 then pen = (0.05 - dot) * 14 end
+						end
+					end
+					if (dist + pen) < ms then ms = dist + pen; best = plr end
+				end
 			end
 		end
 	end
 	if best then
-		setCurrentTarget(best)
-		S.tJanelaHit = 0
+		S.alvoPvp, S.tJanelaHit = best, 0
 		if syncHitMarc then pcall(syncHitMarc) end
 	end
 	return best
 end
 
 local function getPvpAlvo(mr)
-	if not S.pvpLoop or not mr then return nil, nil, false end
-	local pers = currentTarget or S.alvoPvp
-	if not pers then return nil, nil, false end
-	local ra, dist = alvoValidoPers(pers, mr, raioHitReg() + CFG.MARGEM_KA + 18)
-	if not ra then
-		clearCurrentTarget()
+	if not S.pvpLoop or not mr then S.alvoPvp = nil; return nil, nil, false end
+	if not (S.alvoPvp and S.alvoPvp.Parent == Players and elegivel(S.alvoPvp)) then S.alvoPvp = nil; return nil, nil, false end
+	local _, ra, ha = getCR(S.alvoPvp)
+	if not (ra and ha and ha.Health > 0) then
+		S.alvoPvp = nil
 		if syncHitMarc then pcall(syncHitMarc) end
 		return nil, nil, false
 	end
-	setCurrentTarget(pers)
+	local dist = (ra.Position - mr.Position).Magnitude
 	local mEx = S.hitOn and (S.hitSize * 0.5) or 0
-	return ra, pers, (dist <= (raioHitReg() + mEx + 18) and dist > 0.05)
+	return ra, S.alvoPvp, (dist <= (raioHitReg() + mEx) and dist > 0.1)
+end
+
+-- ==========================================
+-- GRAB ASSIST (TECLA G): ALINHAMENTO RAPIDO EM FOCO OU MAIS PROXIMO
+-- ==========================================
+local function escolherAlvoGrab(mr, rMax)
+	local refPos = (S.inv and S.posInv) or mr.Position
+
+	local function validarPlr(plr)
+		if not plr or plr.Parent ~= Players or not elegivel(plr) then return nil, nil end
+		local _, ra, ha = getCR(plr)
+		if not ra or not ra.Parent or not ha or ha.Health <= 0 then return nil, nil end
+		local d = (ra.Position - refPos).Magnitude
+		if d > rMax or d <= 0.05 then return nil, nil end
+		return ra, d
+	end
+
+	-- 1. Prioriza quem ja esta marcado/focado (PvP / Kill Aura / Target Lock)
+	for _, cand in ipairs({ S.alvoPvp, S.alvoKa }) do
+		local ra, d = validarPlr(cand)
+		if ra then return ra, cand, d end
+	end
+	if S.alvo and S.alvo.Parent then
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if plr.Character and S.alvo:IsDescendantOf(plr.Character) then
+				local ra, d = validarPlr(plr)
+				if ra then return ra, plr, d end
+			end
+		end
+	end
+
+	-- 2. Se houver filtro Focus, prioriza o mais proximo dentro do Focus
+	if temFocus() then
+		local bestR, bestP, bestD = nil, nil, math.huge
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if ehFocus(plr) then
+				local ra, d = validarPlr(plr)
+				if ra and d < bestD then bestD = d; bestR = ra; bestP = plr end
+			end
+		end
+		if bestR then return bestR, bestP, bestD end
+	end
+
+	-- 3. Caso contrario, pega o jogador elegivel mais proximo (ignorando AMG)
+	local bestR, bestP, bestD = nil, nil, math.huge
+	for _, plr in ipairs(Players:GetPlayers()) do
+		local ra, d = validarPlr(plr)
+		if ra and d < bestD then bestD = d; bestR = ra; bestP = plr end
+	end
+	return bestR, bestP, bestD
+end
+
+local function aplGrabAssist()
+	if not S.grabAssist then return end
+	local ch, mr, hum = getCR(LocalPlayer)
+	if not ch or not mr then return end
+	local rMax = math.max(CFG.DIST_GRAB_ASSIST, CFG.DIST_MAX)
+	local alvoRoot, alvoPlr = escolherAlvoGrab(mr, rMax)
+	if not alvoRoot or not alvoPlr then return end
+
+	local refPos = (S.inv and S.posInv) or mr.Position
+	local dx = alvoRoot.Position.X - refPos.X
+	local dz = alvoRoot.Position.Z - refPos.Z
+	if (dx * dx + dz * dz) <= 0.0025 then return end
+
+	local yawAlvo = math.atan2(-dx, -dz)
+	pcall(function()
+		if S.inv and S.posInv then
+			S.yawInv = yawAlvo
+			travarInv(ch, mr, hum)
+		else
+			mr.AssemblyAngularVelocity = Vector3.zero
+			mr.CFrame = CFrame.new(mr.Position) * CFrame.fromEulerAnglesYXZ(0, yawAlvo, 0)
+		end
+	end)
 end
 
 local function desviarAmg(mr)
-	if not mr or S.inv or (S.ativo and S.lockOn) or currentTarget or S.kaLockPlr or UserInputService:GetFocusedTextBox() then return end
+	if not mr or S.inv or (S.ativo and S.lockOn) or UserInputService:GetFocusedTextBox() then return end
 	local lp = Vector3.new(mr.CFrame.LookVector.X, 0, mr.CFrame.LookVector.Z)
 	if lp.Magnitude < 0.001 then return end
 	lp = lp.Unit
@@ -1098,14 +1144,14 @@ local function updCacheAlvos(now, mr, rMax)
 	if (now - S.tScan) < 0.04 then return end
 	S.tScan = now
 	table.clear(S.cacheAlvos)
-	local orig = getOrigRef(mr)
+	local orig = (S.inv and S.posInv) or mr.Position
 	for _, plr in ipairs(Players:GetPlayers()) do
 		if elegivel(plr) and plr.Character then
 			local h = plr.Character:FindFirstChildOfClass("Humanoid")
 			local r = plr.Character:FindFirstChild("HumanoidRootPart") or plr.Character.PrimaryPart
 			if h and h.Health > 0 and r and r.Parent then
 				local d = (r.Position - orig).Magnitude
-				if d <= (rMax + CFG.MARGEM_KA) and d > 0.05 then
+				if d <= (rMax + CFG.MARGEM_KA) and d > 0.1 then
 					table.insert(S.cacheAlvos, { plr = plr, root = r, hum = h, dist = d })
 				end
 			end
@@ -1113,70 +1159,33 @@ local function updCacheAlvos(now, mr, rMax)
 	end
 end
 
-local function getRaioEfetivoKa()
-	if S.hitOn then
-		return math.max(CFG.DIST_KA, S.hitSize + 3)
-	end
-	return CFG.DIST_KA
-end
-
 local function getAlvoKa(mr, rMax, now)
-	if not S.ka or not mr then
-		if not S.pvpLoop then clearCurrentTarget() end
-		return nil, nil
-	end
+	if not mr then return nil, nil end
 	if S.pvpLoop then
 		local rl, pl, ok = getPvpAlvo(mr)
-		if rl and pl and ok then
-			setCurrentTarget(pl)
-			return rl, pl
-		end
-		return nil, nil
+		if rl and pl and ok then S.alvoKa = pl; return rl, pl end
+		S.alvoKa = nil; return nil, nil
 	end
-
-	local limBusca = rMax
-	local limMant = rMax + CFG.MARGEM_KA + 18
-
-	-- 1. Separar selecao de execucao: se ja ha alvo persistente valido, mantem ele sem trocar por terceiros
-	local travado = currentTarget or S.kaLockPlr or S.alvoKa
-	if travado then
-		local rt = alvoValidoPers(travado, mr, limMant)
-		if rt then
-			setCurrentTarget(travado)
-			return rt, travado
-		end
-		clearCurrentTarget()
-	end
-
-	-- 2. Seleciona apenas quando nao ha alvo ativo valido
 	updCacheAlvos(now, mr, rMax)
-
-	local bestR, bestP, bestD = nil, nil, math.huge
-	for _, it in ipairs(S.cacheAlvos) do
-		local rt, d = alvoValidoPers(it.plr, mr, limBusca)
-		if rt and d < bestD then
-			bestD = d
-			bestR = rt
-			bestP = it.plr
-		end
-	end
-
-	if not bestR then
-		for _, plr in ipairs(Players:GetPlayers()) do
-			local rt, d = alvoValidoPers(plr, mr, limBusca)
-			if rt and d < bestD then
-				bestD = d
-				bestR = rt
-				bestP = plr
+	local orig = (S.inv and S.posInv) or mr.Position
+	if S.alvoKa and S.alvoKa.Parent == Players and elegivel(S.alvoKa) then
+		for _, it in ipairs(S.cacheAlvos) do
+			if it.plr == S.alvoKa and it.root and it.root.Parent and it.hum.Health > 0 then
+				local d = (it.root.Position - orig).Magnitude
+				if d <= (rMax + CFG.MARGEM_KA) and d > 0.1 then return it.root, S.alvoKa end
 			end
 		end
+		S.alvoKa = nil
 	end
-
-	if bestP then
-		setCurrentTarget(bestP)
-	else
-		clearCurrentTarget()
+	local bestR, bestP, bestS = nil, nil, math.huge
+	for _, it in ipairs(S.cacheAlvos) do
+		local d = (it.root.Position - orig).Magnitude
+		if d <= rMax and d > 0.1 then
+			local sc = d + (caido(it.hum) and -12 or 0)
+			if sc < bestS then bestS = sc; bestR = it.root; bestP = it.plr end
+		end
 	end
+	S.alvoKa = bestP
 	return bestR, bestP
 end
 
@@ -1197,21 +1206,21 @@ end
 
 local function temAlvoClk(mr)
 	if not mr then return false end
-	if S.ka then
-		local plr = currentTarget or S.kaLockPlr or S.alvoKa
-		if not plr then return false end
-		return alvoValidoPers(plr, mr, getRaioEfetivoKa() + CFG.MARGEM_KA + 18) ~= nil
-	end
 	if S.pvpLoop then
 		local rl, _, ok = getPvpAlvo(mr)
 		return (rl ~= nil and ok)
 	end
-	local orig = getOrigRef(mr)
-	local raio = getRaioEfetivoKa()
+	local raio = CFG.DIST_MAX + (S.inv and 16 or 0)
+	if S.hitOn and (S.hitSize + 6) > raio then raio = S.hitSize + 6 end
+	local orig = (S.inv and S.posInv) or mr.Position
+	local mEx = S.hitOn and (S.hitSize * 0.5) or 0
 	for _, plr in ipairs(Players:GetPlayers()) do
 		if elegivel(plr) then
-			local rt = alvoValidoPers(plr, mr, raio)
-			if rt and (rt.Position - orig).Magnitude <= raio then return true end
+			local _, r = getCR(plr)
+			if r then
+				local d = (r.Position - orig).Magnitude
+				if d <= (raio + mEx) and d > 0.1 then return true end
+			end
 		end
 	end
 	return false
@@ -1220,12 +1229,10 @@ end
 local function clkRapido()
 	ignHit = true
 	if typeof(mouse1click) == "function" then
-		pcall(mouse1click)
+		mouse1click()
 	else
-		pcall(function()
-			VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
-			VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
-		end)
+		VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+		VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
 	end
 	ignHit = false
 end
@@ -1234,12 +1241,12 @@ local function pulsoAtk(ch, mr, now, atTool)
 	local h = ch and ch:FindFirstChildOfClass("Humanoid")
 	if S.inv and mr then travarInv(ch, mr, h) end
 	if not S.inv then syncCombate(now) end
-	if mr and not S.pvpLoop and not S.inv and not currentTarget and not S.kaLockPlr then desviarAmg(mr) end
+	if mr and not S.pvpLoop and not S.inv then desviarAmg(mr) end
 	if atTool and ch then
 		local tool = ch:FindFirstChildOfClass("Tool")
 		if tool and tool.Parent == ch then
 			if not tool.Enabled then tool.Enabled = true end
-			pcall(function() tool:Activate() end)
+			tool:Activate()
 		end
 	end
 	clkRapido()
@@ -1248,42 +1255,34 @@ end
 
 local function procKa(now)
 	if not S.ka or UserInputService:GetFocusedTextBox() then return false end
-	local ch, mr, h = getCR(LocalPlayer)
-	if not ch or not mr then
-		if not S.pvpLoop then clearCurrentTarget() end
-		return false
-	end
-	local rEf = getRaioEfetivoKa()
-	local alvo, plrAlvo = getAlvoKa(mr, rEf, now)
-	if not alvo or not plrAlvo then
-		pulsoAte, yawAntes, yawPulso = 0, nil, nil
-		return false
-	end
-
-	-- Concentra o giro exclusivamente no alvo persistente
-	if not S.inv and not CFG.ORBITAR then
-		local dx, dz = alvo.Position.X - mr.Position.X, alvo.Position.Z - mr.Position.Z
-		if (dx * dx + dz * dz) > 0.01 then
-			local _, ya, _ = mr.CFrame:ToEulerAnglesYXZ()
-			mr.CFrame = CFrame.new(mr.Position) * CFrame.fromEulerAnglesYXZ(0, ya + (normAng(math.atan2(-dx, -dz) - ya) * math.clamp(CFG.FIRMEZA_GIRO, 0.1, 1)), 0)
-		end
-	end
-
 	local delay = S.inv and CFG.DELAY_KA_INV or CFG.DELAY_KA_NORM
 	if (now - S.tKa) < delay then
+		if S.inv then local c, r, h = getCR(LocalPlayer); if c and r then travarInv(c, r, h) end end
+		return S.alvoKa ~= nil
+	end
+	local ch, mr, h = getCR(LocalPlayer)
+	if not ch or not mr then S.alvoKa = nil; return false end
+	if S.inv then travarInv(ch, mr, h) end
+	local rEf = S.hitOn and math.max(CFG.DIST_KA, S.hitSize + 6) or (CFG.DIST_KA + (S.inv and 16 or 0))
+	local alvo = getAlvoKa(mr, rEf, now)
+	if not alvo then
+		pulsoAte, yawAntes, yawPulso = 0, nil, nil
 		if S.inv then travarInv(ch, mr, h) end
-		return true
+		return false
 	end
 	S.tKa = now
-
-	local raj = S.inv and CFG.RAJADA_KA_INV or CFG.RAJADA_KA_NORM
-	for i = 1, raj do
-		if not alvoValidoPers(plrAlvo, mr, rEf + CFG.MARGEM_KA + 18) then
-			clearCurrentTarget()
-			break
+	if CFG.KA_PULSO and not S.inv then
+		local _, ya, _ = mr.CFrame:ToEulerAnglesYXZ()
+		if yawAntes == nil then yawAntes = ya end
+		local dx, dz = alvo.Position.X - mr.Position.X, alvo.Position.Z - mr.Position.Z
+		if (dx * dx + dz * dz) > 0.0025 then
+			yawPulso = math.atan2(-dx, -dz)
+			mr.CFrame = CFrame.new(mr.Position) * CFrame.fromEulerAnglesYXZ(0, yawPulso, 0)
+			pulsoAte = now + CFG.DUR_PULSO
 		end
-		pulsoAtk(ch, mr, now, i == 1)
 	end
+	local raj = S.inv and CFG.RAJADA_KA_INV or CFG.RAJADA_KA_NORM
+	for i = 1, raj do pulsoAtk(ch, mr, now, i == 1) end
 	if S.inv then travarInv(ch, mr, h) end
 	return true
 end
@@ -1365,7 +1364,6 @@ syncHitMarc = function()
 	local _, mr = getCR(LocalPlayer)
 	local _, plF, dL = nil, nil, false
 	if S.pvpLoop and mr then _, plF, dL = getPvpAlvo(mr) end
-	local focoAtivo = currentTarget or plF or S.kaLockPlr
 
 	for _, plr in ipairs(Players:GetPlayers()) do
 		if plr ~= LocalPlayer then
@@ -1374,18 +1372,15 @@ syncHitMarc = function()
 				local isA = ehAmg(plr)
 				local isF = (not isA) and temFocus() and ehFocus(plr)
 				local exp = S.hitOn and elegivel(plr)
-				if exp and (S.pvpLoop or currentTarget) then
-					if focoAtivo then
-						exp = (plr == focoAtivo) and ((not S.pvpLoop) or dL)
-					else
-						exp = false
-					end
+				if exp and S.pvpLoop then
+					if not temFocus() then exp = (plF and dL) and (plr == plF) or false
+					else exp = (plF and dL and plr == plF) or false end
 				end
 				if not exp and origRoot[r] then restRoot(r) end
 				local m = garMarc(plr, r)
 				if m and m.tagGui and m.tagDot then
 					if isA then m.tagGui.Enabled = true; m.tagDot.BackgroundColor3 = Color3.fromRGB(45, 215, 95)
-					elseif isF or (focoAtivo and plr == focoAtivo) then m.tagGui.Enabled = true; m.tagDot.BackgroundColor3 = Color3.fromRGB(230, 45, 45)
+					elseif isF or (S.pvpLoop and plr == plF) then m.tagGui.Enabled = true; m.tagDot.BackgroundColor3 = Color3.fromRGB(230, 45, 45)
 					else m.tagGui.Enabled = false end
 				end
 				if exp then
@@ -1683,7 +1678,8 @@ local function criarPainel()
 	local bAuto = mkBtn(pC, "AutoClick VOID (E): OFF", UDim2.new(0, 8, 0, 0), UDim2.new(1, -16, 0, 19), 11)
 	local bLock = mkBtn(pC, S.lockOn and "Target Lock: ON" or "Target Lock: OFF", UDim2.new(0, 8, 0, 21), UDim2.new(1, -16, 0, 19), 11); bLock.BackgroundColor3 = S.lockOn and CFG.ROXO_ON or CFG.CINZA
 	local bPvp = mkBtn(pC, S.pvpLoop and "PvP Focus Loop: ON" or "PvP Focus Loop: OFF", UDim2.new(0, 8, 0, 42), UDim2.new(1, -16, 0, 19), 11); bPvp.BackgroundColor3 = S.pvpLoop and CFG.ROXO_ON or CFG.CINZA
-	local bCost = mkBtn(pC, S.backCostas and "Back / Costas: ON" or "Back / Costas: OFF", UDim2.new(0, 8, 0, 63), UDim2.new(1, -16, 0, 19), 11); bCost.BackgroundColor3 = S.backCostas and CFG.ROXO_ON or CFG.CINZA
+	local bCost = mkBtn(pC, S.backCostas and "Back / Costas: ON" or "Back / Costas: OFF", UDim2.new(0, 8, 0, 63), UDim2.new(0.5, -10, 0, 19), 10); bCost.BackgroundColor3 = S.backCostas and CFG.ROXO_ON or CFG.CINZA
+	local bGrabAssist = mkBtn(pC, S.grabAssist and "Grab (G): ON" or "Grab (G): OFF", UDim2.new(0.5, 2, 0, 63), UDim2.new(0.5, -10, 0, 19), 10); bGrabAssist.BackgroundColor3 = S.grabAssist and CFG.ROXO_ON or CFG.CINZA
 	local bRag = mkBtn(pC, S.antiRag and "Anti-Ragdoll: ON" or "Anti-Ragdoll: OFF", UDim2.new(0, 8, 0, 84), UDim2.new(1, -16, 0, 19), 11); bRag.BackgroundColor3 = S.antiRag and CFG.ROXO_ON or CFG.CINZA
 	local bGrab = mkBtn(pC, S.antiGrab and "Anti Grab Rag: ON" or "Anti Grab Rag: OFF", UDim2.new(0, 8, 0, 105), UDim2.new(1, -16, 0, 19), 11); bGrab.BackgroundColor3 = S.antiGrab and CFG.ROXO_ON or CFG.CINZA
 	local bDtp = mkBtn(pC, S.deathTp and "Death TP: ON" or "Death TP: OFF", UDim2.new(0, 8, 0, 126), UDim2.new(1, -16, 0, 19), 11); bDtp.BackgroundColor3 = S.deathTp and CFG.ROXO_ON or CFG.CINZA
@@ -1697,8 +1693,8 @@ local function criarPainel()
 	local bxFoc = mkBox(pC, "Focus (ex: alvo1 alvo2)...", UDim2.new(0, 8, 0, 288), 19)
 	local bxBck = mkBox(pC, "Back / Costas (quem usar)...", UDim2.new(0, 8, 0, 309), 19)
 
-	bxAmg:GetPropertyChangedSignal("Text"):Connect(function() S.amg = bxAmg.Text; if currentTarget and ehAmg(currentTarget) then clearCurrentTarget() end; syncHitMarc() end)
-	bxFoc:GetPropertyChangedSignal("Text"):Connect(function() S.focus = bxFoc.Text; if currentTarget and not ehFocus(currentTarget) then clearCurrentTarget() end; syncHitMarc() end)
+	bxAmg:GetPropertyChangedSignal("Text"):Connect(function() S.amg = bxAmg.Text; S.alvoKa = nil; if S.alvoPvp and ehAmg(S.alvoPvp) then S.alvoPvp = nil end; syncHitMarc() end)
+	bxFoc:GetPropertyChangedSignal("Text"):Connect(function() S.focus = bxFoc.Text; S.alvoKa = nil; syncHitMarc() end)
 	bxBck:GetPropertyChangedSignal("Text"):Connect(function() S.backFilt = bxBck.Text end)
 
 	local pM = tPags.Move
@@ -1748,7 +1744,7 @@ local function criarPainel()
 	local bRst = mkBtn(pCfg, "Resetar Posicao", UDim2.new(0, 8, 0, 34), UDim2.new(1, -16, 0, 25), 11)
 	local inf = Instance.new("TextLabel")
 	inf.Size, inf.Position, inf.BackgroundTransparency = UDim2.new(1, -16, 0, 88), UDim2.new(0, 8, 0, 66), 1
-	inf.Text, inf.TextColor3, inf.TextWrapped, inf.Font, inf.TextSize = "AutoClick: E\nKill Aura: Q\nPainel: J\nCancelar PvP Loop: R / RMB\nOtimizar corta efeitos/sombras.", Color3.fromRGB(190, 190, 205), true, Enum.Font.GothamMedium, 10
+	inf.Text, inf.TextColor3, inf.TextWrapped, inf.Font, inf.TextSize = "AutoClick: E\nKill Aura: Q\nGrab Assist: G\nPainel: J\nCancelar PvP Loop: R / RMB", Color3.fromRGB(190, 190, 205), true, Enum.Font.GothamMedium, 10
 	inf.TextXAlignment, inf.TextYAlignment, inf.Parent = Enum.TextXAlignment.Left, Enum.TextYAlignment.Top, pCfg
 
 	local rod = Instance.new("TextLabel")
@@ -1777,8 +1773,9 @@ local function criarPainel()
 
 	bAuto.MouseButton1Click:Connect(function() setLock(not S.ativo) end)
 	bLock.MouseButton1Click:Connect(function() S.lockOn = not S.lockOn; bLock.Text = S.lockOn and "Target Lock: ON" or "Target Lock: OFF"; bLock.BackgroundColor3 = S.lockOn and CFG.ROXO_ON or CFG.CINZA; if not S.lockOn then S.alvo = nil end end)
-	bPvp.MouseButton1Click:Connect(function() S.pvpLoop = not S.pvpLoop; bPvp.Text = S.pvpLoop and "PvP Focus Loop: ON" or "PvP Focus Loop: OFF"; bPvp.BackgroundColor3 = S.pvpLoop and CFG.ROXO_ON or CFG.CINZA; clearCurrentTarget(); S.tJanelaHit = 0; syncHitMarc() end)
+	bPvp.MouseButton1Click:Connect(function() S.pvpLoop = not S.pvpLoop; bPvp.Text = S.pvpLoop and "PvP Focus Loop: ON" or "PvP Focus Loop: OFF"; bPvp.BackgroundColor3 = S.pvpLoop and CFG.ROXO_ON or CFG.CINZA; S.alvoPvp, S.alvo, S.tJanelaHit = nil, nil, 0; syncHitMarc() end)
 	bCost.MouseButton1Click:Connect(function() S.backCostas = not S.backCostas; bCost.Text = S.backCostas and "Back / Costas: ON" or "Back / Costas: OFF"; bCost.BackgroundColor3 = S.backCostas and CFG.ROXO_ON or CFG.CINZA end)
+	bGrabAssist.MouseButton1Click:Connect(function() S.grabAssist = not S.grabAssist; bGrabAssist.Text = S.grabAssist and "Grab (G): ON" or "Grab (G): OFF"; bGrabAssist.BackgroundColor3 = S.grabAssist and CFG.ROXO_ON or CFG.CINZA end)
 	bRag.MouseButton1Click:Connect(function() S.antiRag = not S.antiRag; bRag.Text = S.antiRag and "Anti-Ragdoll: ON" or "Anti-Ragdoll: OFF"; bRag.BackgroundColor3 = S.antiRag and CFG.ROXO_ON or CFG.CINZA end)
 	bGrab.MouseButton1Click:Connect(function() S.antiGrab = not S.antiGrab; bGrab.Text = S.antiGrab and "Anti Grab Rag: ON" or "Anti Grab Rag: OFF"; bGrab.BackgroundColor3 = S.antiGrab and CFG.ROXO_ON or CFG.CINZA end)
 	bDtp.MouseButton1Click:Connect(function() S.deathTp = not S.deathTp; bDtp.Text = S.deathTp and "Death TP: ON" or "Death TP: OFF"; bDtp.BackgroundColor3 = S.deathTp and CFG.ROXO_ON or CFG.CINZA end)
@@ -1816,15 +1813,9 @@ local function aplFoco()
 	if not S.ativo or not S.lockOn or S.inv then S.alvo = nil; return end
 	local _, mr = getCR(LocalPlayer)
 	if not mr then return end
-	if S.pvpLoop or currentTarget then
-		local pers = currentTarget or S.alvoPvp
-		local rp = pers and alvoValidoPers(pers, mr, CFG.DIST_MAX + CFG.MARGEM_KA + 18)
-		if rp then
-			S.alvo = rp
-		elseif S.pvpLoop then
-			S.alvo = nil
-			return
-		end
+	if S.pvpLoop then
+		local rl, _, ok = getPvpAlvo(mr)
+		if rl and ok then S.alvo = rl else S.alvo = nil; return end
 	else
 		local mp, dm = maisProx(mr, CFG.DIST_MAX)
 		local da = (S.alvo and S.alvo.Parent) and (S.alvo.Position - mr.Position).Magnitude or math.huge
@@ -1842,30 +1833,17 @@ end
 
 UserInputService.InputBegan:Connect(function(inp, gp)
 	if gp or UserInputService:GetFocusedTextBox() then return end
-	if inp.KeyCode == CFG.KEY_ESPECIAL then tEsp = os.clock()
+	if inp.KeyCode == CFG.KEY_ESPECIAL then
+		tEsp = os.clock()
+		aplGrabAssist()
 	elseif inp.KeyCode == CFG.KEY_KA then setKa(not S.ka)
 	elseif inp.KeyCode == CFG.KEY_ATALHO then setLock(not S.ativo)
 	elseif inp.KeyCode == CFG.KEY_PAINEL and UI.painel then UI.painel.Visible = not UI.painel.Visible
-	elseif (inp.KeyCode == CFG.KEY_CANCEL_PVP or inp.UserInputType == Enum.UserInputType.MouseButton2) and (currentTarget or S.alvoPvp) then cancPvp()
-	elseif inp.UserInputType == Enum.UserInputType.MouseButton1 and not ignHit and not currentTarget then
+	elseif (inp.KeyCode == CFG.KEY_CANCEL_PVP or inp.UserInputType == Enum.UserInputType.MouseButton2) and S.pvpLoop and S.alvoPvp then cancPvp()
+	elseif inp.UserInputType == Enum.UserInputType.MouseButton1 and not ignHit and S.pvpLoop and not S.alvoPvp then
 		S.tJanelaHit = os.clock() + 0.35
-		if S.pvpLoop then
-			regPvpHit()
-			task.defer(regPvpHit)
-		else
-			local _, mr = getCR(LocalPlayer)
-			if mr then
-				local best = maisProx(mr, raioHitReg())
-				if best and best.Parent then
-					for _, plr in ipairs(Players:GetPlayers()) do
-						if plr ~= LocalPlayer and plr.Character and best:IsDescendantOf(plr.Character) and elegivel(plr) then
-							setCurrentTarget(plr)
-							break
-						end
-					end
-				end
-			end
-		end
+		regPvpHit()
+		task.defer(regPvpHit)
 	end
 end)
 
@@ -1874,7 +1852,7 @@ pcall(function() RunService:UnbindFromRenderStep("UniversalCharTargetLock") end)
 local accFps, cntFps, uFps, uPing = 0, 0, nil, nil
 RunService.RenderStepped:Connect(function(dt)
 	local now = os.clock()
-	if S.pvpLoop and not currentTarget and now <= S.tJanelaHit then regPvpHit() end
+	if S.pvpLoop and not S.alvoPvp and now <= S.tJanelaHit then regPvpHit() end
 	aplFoco()
 	restPulso()
 	if S.inv then updInv(0, now) end
@@ -1913,12 +1891,10 @@ task.spawn(function()
 end)
 
 Players.PlayerRemoving:Connect(function(plr)
-	if currentTarget == plr then clearCurrentTarget() end
 	if S.alvoKa == plr then S.alvoKa = nil end
-	if S.kaLockPlr == plr then S.kaLockPlr = nil end
 	if S.alvoPvp == plr then S.alvoPvp = nil end
 	limpMarc(plr)
 	S.limpEspPlr(plr)
 end)
 
-print("[The VOID Painel] Kill Aura focado no alvo persistente.")
+print("[The VOID Painel] Grab Assist (G) ativo.")
