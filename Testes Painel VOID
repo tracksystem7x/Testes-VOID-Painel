@@ -80,7 +80,7 @@ local KILL_AURA_PADRAO_ATIVO = false
 local FIGHTING_PADRAO_ATIVO = false
 local NO_ANIMATION_PADRAO_ATIVO = false
 local INVISIVEL_PADRAO_ATIVO = false
-local INVISIVEL_PROFUNDIDADE = EH_HIGHSCHOOL_RP and 3.4 or 3.2
+local INVISIVEL_PROFUNDIDADE = EH_HIGHSCHOOL_RP and 5.5 or 5.2
 local HUD_LOSANGO_PADRAO_VISIVEL = true
 local HUD_STATS_PADRAO_VISIVEL = true
 local SPEED_CFRAME_PADRAO_ATIVO = false
@@ -131,6 +131,9 @@ local posSuperficieInvisivel = nil
 local yawSuperficieInvisivel = 0
 local ancoraCameraInvisivel = nil
 local snapshotTransparenciaInvisivel = {}
+local snapshotTamanhoInvisivel = {}
+local snapshotTagsNomeInvisivel = {}
+local snapshotDisplayDistHum = nil
 local hudLosangoVisivel = HUD_LOSANGO_PADRAO_VISIVEL
 local hudStatsVisivel = HUD_STATS_PADRAO_VISIVEL
 local speedCFrameAtivo = SPEED_CFRAME_PADRAO_ATIVO
@@ -709,7 +712,7 @@ local function sincronizarNoAnimation()
 end
 
 -- ==========================================
--- INVISIVEL (CORPO DEITADO SOB O CHAO + MOVIMENTO LIVRE + CAMERA ACIMA)
+-- INVISIVEL (CAMADA FINA ACHATADA SOB O CHAO + SEM NOME + CAMERA ACIMA)
 -- ==========================================
 local function destruirAncoraCamera()
 	if ancoraCameraInvisivel then
@@ -739,17 +742,44 @@ local function garantirAncoraCamera()
 	return part
 end
 
-local function aplicarVisualFantasmaLocal(char, ativar)
+local function aplicarCamadaFinaENomeInvisivel(char, hum, ativar)
 	if not char then return end
 	if ativar then
+		if hum and snapshotDisplayDistHum == nil then
+			pcall(function()
+				snapshotDisplayDistHum = {
+					NameDisplayDistance = hum.NameDisplayDistance,
+					HealthDisplayDistance = hum.HealthDisplayDistance
+				}
+				hum.NameDisplayDistance = Enum.HumanoidDisplayDistanceType.None
+				hum.HealthDisplayDistance = Enum.HumanoidDisplayDistanceType.None
+			end)
+		end
+
 		for _, desc in ipairs(char:GetDescendants()) do
-			if desc:IsA("BasePart") and desc.Name ~= "HumanoidRootPart" then
-				if snapshotTransparenciaInvisivel[desc] == nil then
-					snapshotTransparenciaInvisivel[desc] = desc.LocalTransparencyModifier
+			if desc:IsA("BasePart") then
+				if desc.Name ~= "HumanoidRootPart" then
+					if snapshotTransparenciaInvisivel[desc] == nil then
+						snapshotTransparenciaInvisivel[desc] = desc.LocalTransparencyModifier
+					end
+					pcall(function()
+						desc.LocalTransparencyModifier = math.max(desc.LocalTransparencyModifier, 0.35)
+					end)
+				end
+				if snapshotTamanhoInvisivel[desc] == nil then
+					snapshotTamanhoInvisivel[desc] = desc.Size
 				end
 				pcall(function()
-					desc.LocalTransparencyModifier = math.max(desc.LocalTransparencyModifier, 0.35)
+					local sz = snapshotTamanhoInvisivel[desc]
+					desc.Size = Vector3.new(math.max(sz.X, 0.25), 0.12, math.max(sz.Z, 0.25))
 				end)
+			elseif desc:IsA("BillboardGui") then
+				if desc.Name ~= "AMG_Focus_Indicator" and snapshotTagsNomeInvisivel[desc] == nil then
+					snapshotTagsNomeInvisivel[desc] = desc.Enabled
+					pcall(function()
+						desc.Enabled = false
+					end)
+				end
 			end
 		end
 	else
@@ -761,6 +791,32 @@ local function aplicarVisualFantasmaLocal(char, ativar)
 			end
 		end
 		table.clear(snapshotTransparenciaInvisivel)
+
+		for part, origSize in pairs(snapshotTamanhoInvisivel) do
+			if part and part.Parent then
+				pcall(function()
+					part.Size = origSize
+				end)
+			end
+		end
+		table.clear(snapshotTamanhoInvisivel)
+
+		for guiTag, origEnabled in pairs(snapshotTagsNomeInvisivel) do
+			if guiTag and guiTag.Parent then
+				pcall(function()
+					guiTag.Enabled = origEnabled
+				end)
+			end
+		end
+		table.clear(snapshotTagsNomeInvisivel)
+
+		if hum and snapshotDisplayDistHum then
+			pcall(function()
+				hum.NameDisplayDistance = snapshotDisplayDistHum.NameDisplayDistance
+				hum.HealthDisplayDistance = snapshotDisplayDistHum.HealthDisplayDistance
+			end)
+			snapshotDisplayDistHum = nil
+		end
 	end
 end
 
@@ -875,19 +931,19 @@ local function atualizarInvisivelSubsolo(dt)
 
 	local alturaLimiteVoid = workspace.FallenPartsDestroyHeight + 25
 	local yAbaixo = math.max(posSuperficieInvisivel.Y - INVISIVEL_PROFUNDIDADE, alturaLimiteVoid)
-	local cfDeitadoAbaixo = CFrame.new(posSuperficieInvisivel.X, yAbaixo, posSuperficieInvisivel.Z)
+	local cfCamadaFinaAbaixo = CFrame.new(posSuperficieInvisivel.X, yAbaixo, posSuperficieInvisivel.Z)
 		* CFrame.fromEulerAnglesYXZ(0, yawSuperficieInvisivel, 0)
-		* CFrame.Angles(math.rad(86), 0, 0)
+		* CFrame.Angles(math.rad(88), 0, 0)
 
 	pcall(function()
 		if hum.Sit then hum.Sit = false end
 		if hum.PlatformStand then hum.PlatformStand = false end
 		root.AssemblyLinearVelocity = Vector3.zero
 		root.AssemblyAngularVelocity = Vector3.zero
-		root.CFrame = cfDeitadoAbaixo
+		root.CFrame = cfCamadaFinaAbaixo
 	end)
 
-	aplicarVisualFantasmaLocal(char, true)
+	aplicarCamadaFinaENomeInvisivel(char, hum, true)
 	sincronizarCameraInvisivel(hum, posSuperficieInvisivel)
 end
 
@@ -899,7 +955,7 @@ local function setInvisivelEstado(novoEstado)
 
 	if not invisivelAtivo then
 		destruirAncoraCamera()
-		aplicarVisualFantasmaLocal(char, false)
+		aplicarCamadaFinaENomeInvisivel(char, hum, false)
 		if root and posSuperficieInvisivel then
 			local cfVolta = CFrame.new(posSuperficieInvisivel.X, posSuperficieInvisivel.Y + 1.2, posSuperficieInvisivel.Z)
 				* CFrame.fromEulerAnglesYXZ(0, yawSuperficieInvisivel, 0)
@@ -922,7 +978,7 @@ local function setInvisivelEstado(novoEstado)
 			local _, yawAtual, _ = root.CFrame:ToEulerAnglesYXZ()
 			yawSuperficieInvisivel = yawAtual
 		end
-		aplicarVisualFantasmaLocal(char, true)
+		aplicarCamadaFinaENomeInvisivel(char, hum, true)
 		atualizarInvisivelSubsolo(0.016)
 	end
 end
@@ -966,6 +1022,9 @@ local function recuperarEstadoAposQueda(novoChar)
 	posSuperficieInvisivel = nil
 	destruirAncoraCamera()
 	table.clear(snapshotTransparenciaInvisivel)
+	table.clear(snapshotTamanhoInvisivel)
+	table.clear(snapshotTagsNomeInvisivel)
+	snapshotDisplayDistHum = nil
 	local humNovo = novoChar and novoChar:FindFirstChildOfClass("Humanoid")
 	sincronizarCameraInvisivel(humNovo, nil)
 	janelaRegistroHitAte = 0
