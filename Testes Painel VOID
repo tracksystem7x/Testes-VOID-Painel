@@ -62,10 +62,10 @@ local DELAY_KILL_AURA_NORMAL = 0.015
 local RAJADA_KILL_AURA_NORMAL = 5
 local DELAY_CLIQUE_NORMAL = 0.015
 
--- Modo INVISIVEL (Invisivel ON): perfil leve para manter FPS estavel e sem glitches
-local DELAY_KILL_AURA_INVISIVEL = 0.05
-local RAJADA_KILL_AURA_INVISIVEL = 1
-local DELAY_CLIQUE_INVISIVEL = 0.05
+-- Modo INVISIVEL (Invisivel ON): ataque ativo sem travar FPS nem perder alcance da quadra
+local DELAY_KILL_AURA_INVISIVEL = 0.025
+local RAJADA_KILL_AURA_INVISIVEL = 3
+local DELAY_CLIQUE_INVISIVEL = 0.025
 
 local KILL_AURA_PULSO_ALVO = false
 local DURACAO_PULSO_MIRA = 0.008
@@ -87,7 +87,11 @@ local KILL_AURA_PADRAO_ATIVO = false
 local FIGHTING_PADRAO_ATIVO = false
 local NO_ANIMATION_PADRAO_ATIVO = false
 local INVISIVEL_PADRAO_ATIVO = false
-local INVISIVEL_PROFUNDIDADE = 5.5
+
+-- Profundidade regulada: abaixo do piso da quadra para ficar oculto e ainda registrar combate
+local INVISIVEL_PROFUNDIDADE = 1.65
+local COR_PISO_QUADRA = Color3.fromRGB(196, 154, 108)
+
 local HUD_LOSANGO_PADRAO_VISIVEL = true
 local HUD_STATS_PADRAO_VISIVEL = true
 local SPEED_CFRAME_PADRAO_ATIVO = false
@@ -140,6 +144,7 @@ local ancoraCameraInvisivel = nil
 local snapshotTransparenciaInvisivel = {}
 local snapshotPartTranspInvisivel = {}
 local snapshotTamanhoInvisivel = {}
+local snapshotCorMaterialInvisivel = {}
 local snapshotDecalsInvisivel = {}
 local snapshotMeshesInvisivel = {}
 local snapshotRoupasInvisivel = {}
@@ -357,7 +362,7 @@ end
 
 local function garantirEstadoCombateParaAtaque(agora)
 	local now = agora or os.clock()
-	if (now - ultimoSyncCombateTick) < 0.5 then return end
+	if (now - ultimoSyncCombateTick) < 0.35 then return end
 	ultimoSyncCombateTick = now
 	local char = LocalPlayer.Character
 	local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -761,7 +766,7 @@ local function sincronizarNoAnimation()
 end
 
 -- ==========================================
--- INVISIVEL (FIO MINIMO + SEM ACESSORIOS/ROUPA/NOME DEITADO SOB O CHAO)
+-- INVISIVEL (FIO MINIMO NO PISO DA QUADRA + ATAQUE ATIVO)
 -- ==========================================
 local function obterCachePartesPersonagem(char)
 	if not char then return {} end
@@ -818,6 +823,7 @@ local function limparSnapshotsInvisivel()
 	table.clear(snapshotTransparenciaInvisivel)
 	table.clear(snapshotPartTranspInvisivel)
 	table.clear(snapshotTamanhoInvisivel)
+	table.clear(snapshotCorMaterialInvisivel)
 	table.clear(snapshotDecalsInvisivel)
 	table.clear(snapshotMeshesInvisivel)
 	table.clear(snapshotRoupasInvisivel)
@@ -855,13 +861,14 @@ local function aplicarFioTotalInvisivel(char, hum, ativar, aplicarTamanhos)
 		for _, desc in ipairs(itens) do
 			if desc.Parent then
 				if desc:IsA("BasePart") then
-					if aplicarTamanhos then
+					local ehToolHandle = (desc.Parent and desc.Parent:IsA("Tool")) or (desc.Name == "Handle")
+					if aplicarTamanhos and not ehToolHandle then
 						if snapshotTamanhoInvisivel[desc] == nil then
 							snapshotTamanhoInvisivel[desc] = desc.Size
 						end
 						local alvoSize = (desc.Name == "HumanoidRootPart")
-							and Vector3.new(0.01, 0.001, 0.01)
-							or Vector3.new(0.001, 0.001, 0.001)
+							and Vector3.new(0.02, 0.005, 0.02)
+							or Vector3.new(0.002, 0.002, 0.002)
 						if desc.Size ~= alvoSize then
 							pcall(function() desc.Size = alvoSize end)
 						end
@@ -872,20 +879,33 @@ local function aplicarFioTotalInvisivel(char, hum, ativar, aplicarTamanhos)
 					if snapshotPartTranspInvisivel[desc] == nil then
 						snapshotPartTranspInvisivel[desc] = desc.Transparency
 					end
-					if desc.LocalTransparencyModifier ~= 1 or desc.Transparency ~= 1 or desc.CastShadow or desc.CanCollide then
+					if snapshotCorMaterialInvisivel[desc] == nil then
+						snapshotCorMaterialInvisivel[desc] = {
+							Color = desc.Color,
+							Material = desc.Material
+						}
+					end
+					local ltmAlvo = ehToolHandle and 0.65 or 1
+					local transpAlvo = ehToolHandle and 0.65 or 1
+					if desc.LocalTransparencyModifier ~= ltmAlvo or desc.Transparency ~= transpAlvo or desc.CastShadow or desc.CanCollide then
 						pcall(function()
-							desc.LocalTransparencyModifier = 1
-							desc.Transparency = 1
+							desc.Color = COR_PISO_QUADRA
+							desc.Material = Enum.Material.SmoothPlastic
+							desc.LocalTransparencyModifier = ltmAlvo
+							desc.Transparency = transpAlvo
 							desc.CastShadow = false
 							desc.CanCollide = false
 						end)
 					end
 				elseif desc:IsA("SpecialMesh") then
-					if snapshotMeshesInvisivel[desc] == nil then
-						snapshotMeshesInvisivel[desc] = desc.Scale
-					end
-					if desc.Scale ~= Vector3.zero then
-						pcall(function() desc.Scale = Vector3.zero end)
+					local ehHandleMesh = (desc.Parent and desc.Parent.Name == "Handle")
+					if not ehHandleMesh then
+						if snapshotMeshesInvisivel[desc] == nil then
+							snapshotMeshesInvisivel[desc] = desc.Scale
+						end
+						if desc.Scale ~= Vector3.zero then
+							pcall(function() desc.Scale = Vector3.zero end)
+						end
 					end
 				elseif desc:IsA("Decal") or desc:IsA("Texture") then
 					if snapshotDecalsInvisivel[desc] == nil then
@@ -937,6 +957,14 @@ local function aplicarFioTotalInvisivel(char, hum, ativar, aplicarTamanhos)
 			if part and part.Parent then
 				pcall(function()
 					part.Transparency = origTransp
+				end)
+			end
+		end
+		for part, origCM in pairs(snapshotCorMaterialInvisivel) do
+			if part and part.Parent and origCM then
+				pcall(function()
+					part.Color = origCM.Color
+					part.Material = origCM.Material
 				end)
 			end
 		end
@@ -1791,7 +1819,7 @@ local function desviarMiraSeAmigoNaFrente(meuRoot)
 end
 
 -- ==========================================
--- SELECAO DO KILL AURA COM CACHE LEVE (SEM QUEDA DE FPS)
+-- SELECAO DO KILL AURA COM CACHE LEVE
 -- ==========================================
 local function atualizarCacheAlvos(agora, meuRoot, raioMax)
 	if (agora - ultimoScanAlvosTick) < 0.04 then
@@ -1901,7 +1929,7 @@ local function aplicarBackCostas()
 end
 
 local function obterAlcanceAutoClick()
-	local raioBase = DISTANCIA_MAXIMA + (invisivelAtivo and 10 or 0)
+	local raioBase = DISTANCIA_MAXIMA + (invisivelAtivo and 14 or 0)
 	if hitboxAtivo then
 		local raioHitbox = hitboxSize + 6
 		if raioHitbox > raioBase then
@@ -1979,7 +2007,7 @@ local function processarKillAuraFrame(agora)
 		return false
 	end
 
-	local alcanceEfetivo = hitboxAtivo and math.max(DISTANCIA_KILL_AURA, hitboxSize + 6) or (DISTANCIA_KILL_AURA + (invisivelAtivo and 10 or 0))
+	local alcanceEfetivo = hitboxAtivo and math.max(DISTANCIA_KILL_AURA, hitboxSize + 6) or (DISTANCIA_KILL_AURA + (invisivelAtivo and 14 or 0))
 	local alvoProximo = obterAlvoKillAuraPersistente(meuRoot, alcanceEfetivo, agora)
 	if not alvoProximo then
 		pulsoMiraAte = 0
@@ -3075,4 +3103,4 @@ Players.PlayerRemoving:Connect(function(plr)
 	limparMarcador(plr)
 end)
 
-print("[The VOID Painel] Invisivel deitado sob o chao com partes/meshes/roupas/nome ocultos!")
+print("[The VOID Painel] Fio sob o chao na cor da quadra + Kill Aura e AutoClick ativos no modo invisivel!")
