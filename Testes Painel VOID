@@ -6,6 +6,7 @@ if getgenv and getgenv().UniversalTargetLockLoaded then
 end
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
@@ -13,6 +14,18 @@ local StatsService = game:GetService("Stats")
 local Lighting = game:GetService("Lighting")
 local CoreGui = game:GetService("CoreGui")
 local LocalPlayer = Players.LocalPlayer
+
+local GrabRemote = (function()
+	local ok, rem = pcall(function()
+		local pkgs = ReplicatedStorage:WaitForChild("Packages", 5)
+		local knit = pkgs and pkgs:WaitForChild("Knit", 5)
+		local svcs = knit and knit:WaitForChild("Services", 5)
+		local combat = svcs and svcs:WaitForChild("CombatService", 5)
+		local rf = combat and combat:WaitForChild("RF", 5)
+		return rf and rf:WaitForChild("Grab", 5)
+	end)
+	return ok and rem or nil
+end)()
 
 local EH_HIGHSCHOOL_RP = (game.PlaceId == 112333343527957) or (game.GameId == 10394064134)
 if not EH_HIGHSCHOOL_RP then
@@ -36,8 +49,9 @@ local CFG = {
 	DIST_GRAB_ASSIST = 70.0,
 	GRAB_PUXAR_DIST = 28.0,
 	GRAB_JANELA_ALIGN = 0.22,
-	SPAM_GRAB_DELAY = 0.09,
-	SPAM_GRAB_HOLD = 0.02,
+	ExtendedRange = 5000,
+	GrabsPerFrame = 10,
+	ParallelThreads = 4,
 	MARGEM_TROCA = 3.5,
 	FIRMEZA_GIRO = 1.0,
 	ORBITAR = false,
@@ -87,7 +101,6 @@ local S = {
 	backCostas = false,
 	grabAssist = true,
 	spamGrab = false,
-	tSpamGrab = 0,
 	grabDist = math.clamp(math.floor((CFG.DIST_GRAB_ASSIST or 70) + 0.5), 1, 100),
 	grabPullDist = math.clamp(math.floor((CFG.GRAB_PUXAR_DIST or 28) + 0.5), 1, 100),
 	antiRag = EH_HIGHSCHOOL_RP and true or false,
@@ -141,6 +154,8 @@ local S = {
 local snapInv = { transp = {}, partTransp = {}, size = {}, cm = {}, acc = {}, dec = {}, mesh = {}, roupa = {} }
 local origRoot, ultEstRoot, marcPlr, animConns, espObjs = {}, {}, {}, {}, {}
 local tEsp, tToggleKa, pulsoAte, yawAntes, yawPulso, posMorte, mortaVida, snapGraf, ignHit = 0, 0, 0, nil, nil, nil, false, nil, false
+local spamToken = 0
+local spamFrameConn = nil
 local UI = {}
 
 local parentGui = (function()
@@ -704,6 +719,24 @@ local function setInv(on)
 	end
 end
 
+local function applyExtendedRange()
+	local char = LocalPlayer.Character
+	if char then
+		for _, obj in ipairs(char:GetDescendants()) do
+			if obj:IsA("NumberValue") or obj:IsA("IntValue") then
+				local low = string.lower(obj.Name or "")
+				if string.find(low, "range", 1, true) or string.find(low, "grab", 1, true) then
+					pcall(function() obj.Value = CFG.ExtendedRange end)
+				end
+			end
+		end
+	end
+	pcall(function()
+		LocalPlayer:SetAttribute("GrabRange", CFG.ExtendedRange)
+		LocalPlayer:SetAttribute("Range", CFG.ExtendedRange)
+	end)
+end
+
 local function regMorte(ch)
 	if mortaVida then return end
 	local tc = ch or LocalPlayer.Character
@@ -756,11 +789,15 @@ local function recQueda(nc)
 	end)
 end
 
-if LocalPlayer.Character then monMorte(LocalPlayer.Character) end
+if LocalPlayer.Character then
+	monMorte(LocalPlayer.Character)
+	applyExtendedRange()
+end
 LocalPlayer.CharacterAdded:Connect(function(nc)
 	local dest = posMorte
 	monMorte(nc)
 	recQueda(nc)
+	task.delay(1, applyExtendedRange)
 	if S.fighting then task.delay(0.3, function() if S.fighting then setFighting(true) end end) end
 	if S.deathTp and dest then
 		task.spawn(function()
@@ -1053,7 +1090,7 @@ local function getPvpAlvo(mr)
 end
 
 -- ==========================================
--- GRAB ASSIST (TECLA G) + SPAM GRAB (LOOP LIVRE, SEM LOCK)
+-- GRAB ASSIST (TECLA G) + SPAM GRAB (MOTOR ROLEX INTEGRADO)
 -- ==========================================
 local function escolherAlvoGrab(mr, rMax, candPreferido)
 	local refPos = (S.inv and S.posInv) or mr.Position
@@ -1149,42 +1186,75 @@ local function aplGrabAssist(forcarNovoAlvo, moverPosicao)
 	end)
 end
 
-local spamGrabRodando = false
-local function iniciarLoopSpamGrab()
-	if spamGrabRodando then return end
-	spamGrabRodando = true
-	task.spawn(function()
-		while S.spamGrab do
-			if not UserInputService:GetFocusedTextBox() then
-				local ch = LocalPlayer.Character
-				local hum = ch and ch:FindFirstChildOfClass("Humanoid")
-				if ch and hum and hum.Health > 0 then
-					ignHit = true
-					pcall(function()
-						VirtualInputManager:SendKeyEvent(true, CFG.KEY_ESPECIAL, false, game)
-					end)
-					task.wait(CFG.SPAM_GRAB_HOLD or 0.02)
-					pcall(function()
-						VirtualInputManager:SendKeyEvent(false, CFG.KEY_ESPECIAL, false, game)
-					end)
-					ignHit = false
-				end
+local function dispararGrabRemoto()
+	if GrabRemote then
+		pcall(function()
+			GrabRemote:InvokeServer()
+		end)
+	end
+end
+
+local function stopSpamGrab()
+	S.spamGrab = false
+	spamToken += 1
+	if spamFrameConn then
+		pcall(function() spamFrameConn:Disconnect() end)
+		spamFrameConn = nil
+	end
+	if UI.btnSpamGrab then
+		UI.btnSpamGrab.Text = "Spam Grab: OFF"
+		UI.btnSpamGrab.BackgroundColor3 = CFG.CINZA
+	end
+end
+
+local function startSpamGrab()
+	if S.spamGrab then return end
+	S.spamGrab = true
+	spamToken += 1
+	local myToken = spamToken
+	applyExtendedRange()
+
+	if UI.btnSpamGrab then
+		UI.btnSpamGrab.Text = "Spam Grab: ON"
+		UI.btnSpamGrab.BackgroundColor3 = CFG.ROXO_ON
+	end
+
+	if spamFrameConn then
+		pcall(function() spamFrameConn:Disconnect() end)
+		spamFrameConn = nil
+	end
+
+	spamFrameConn = RunService.RenderStepped:Connect(function()
+		if not S.spamGrab or myToken ~= spamToken then
+			if spamFrameConn then
+				spamFrameConn:Disconnect()
+				spamFrameConn = nil
 			end
-			task.wait(math.max(0.02, CFG.SPAM_GRAB_DELAY or 0.09))
+			return
 		end
-		ignHit = false
-		spamGrabRodando = false
+		if UserInputService:GetFocusedTextBox() then return end
+		for _ = 1, (CFG.GrabsPerFrame or 10) do
+			task.spawn(dispararGrabRemoto)
+		end
 	end)
+
+	for _ = 1, (CFG.ParallelThreads or 4) do
+		task.spawn(function()
+			while S.spamGrab and myToken == spamToken do
+				if not UserInputService:GetFocusedTextBox() then
+					pcall(dispararGrabRemoto)
+				end
+				task.wait()
+			end
+		end)
+	end
 end
 
 local function setSpamGrab(on)
-	S.spamGrab = not not on
-	if UI.btnSpamGrab then
-		UI.btnSpamGrab.Text = S.spamGrab and "Spam Grab: ON" or "Spam Grab: OFF"
-		UI.btnSpamGrab.BackgroundColor3 = S.spamGrab and CFG.ROXO_ON or CFG.CINZA
-	end
-	if S.spamGrab then
-		iniciarLoopSpamGrab()
+	if on then
+		startSpamGrab()
+	else
+		stopSpamGrab()
 	end
 end
 
@@ -1977,4 +2047,4 @@ Players.PlayerRemoving:Connect(function(plr)
 	S.limpEspPlr(plr)
 end)
 
-print("[The VOID Painel] Spam Grab em loop livre ativado na aba Combat.")
+print("[The VOID Painel] Motor ROLEX de Spam Grab integrado.")
