@@ -57,12 +57,12 @@ local DISTANCIA_MAXIMA_COSTAS = 45
 local DISTANCIA_KILL_AURA = EH_HIGHSCHOOL_RP and 26 or 30
 local MARGEM_PERSISTENCIA_KILL_AURA = 6
 
--- Modo NORMAL (Invisivel OFF): clique rapido e rajada alta sem afogar o frame
-local DELAY_KILL_AURA_NORMAL = 0.012
+-- Modo NORMAL (Invisivel OFF): potencia maxima e rajada 5 com cache leve de alvos
+local DELAY_KILL_AURA_NORMAL = 0.015
 local RAJADA_KILL_AURA_NORMAL = 5
-local DELAY_CLIQUE_NORMAL = 0.012
+local DELAY_CLIQUE_NORMAL = 0.015
 
--- Modo INVISIVEL (Invisivel ON): ritmo leve para evitar queda de FPS e glitches
+-- Modo INVISIVEL (Invisivel ON): perfil leve para manter FPS estavel e sem glitches
 local DELAY_KILL_AURA_INVISIVEL = 0.05
 local RAJADA_KILL_AURA_INVISIVEL = 1
 local DELAY_CLIQUE_INVISIVEL = 0.05
@@ -87,7 +87,7 @@ local KILL_AURA_PADRAO_ATIVO = false
 local FIGHTING_PADRAO_ATIVO = false
 local NO_ANIMATION_PADRAO_ATIVO = false
 local INVISIVEL_PADRAO_ATIVO = false
-local INVISIVEL_PROFUNDIDADE = 3.2
+local INVISIVEL_PROFUNDIDADE = 4.5
 local HUD_LOSANGO_PADRAO_VISIVEL = true
 local HUD_STATS_PADRAO_VISIVEL = true
 local SPEED_CFRAME_PADRAO_ATIVO = false
@@ -137,6 +137,7 @@ local posSuperficieInvisivel = nil
 local yawSuperficieInvisivel = 0
 local ancoraCameraInvisivel = nil
 local snapshotTransparenciaInvisivel = {}
+local snapshotPartTranspInvisivel = {}
 local snapshotTamanhoInvisivel = {}
 local snapshotDecalsInvisivel = {}
 local snapshotDisplayDistHum = nil
@@ -159,6 +160,8 @@ local alvoPvpLoopPlayer = nil
 local alvoKillAuraPlayer = nil
 local ultimoDisparoKillAuraTick = 0
 local ultimoDisparoAutoClickTick = 0
+local ultimoScanAlvosTick = 0
+local alvosElegiveisCache = {}
 local janelaRegistroHitAte = 0
 local ultimoSyncCombateTick = 0
 local ultimoVisibilidadeOutrosTick = 0
@@ -244,7 +247,7 @@ end
 -- GARANTIR NOMES E VIDA DOS OUTROS JOGADORES VISIVEIS
 -- ==========================================
 local function garantirNomesEVidaOutrosJogadores(agora)
-	if agora and (agora - ultimoVisibilidadeOutrosTick) < 0.5 then
+	if agora and (agora - ultimoVisibilidadeOutrosTick) < 0.6 then
 		return
 	end
 	ultimoVisibilidadeOutrosTick = agora or os.clock()
@@ -349,7 +352,7 @@ end
 
 local function garantirEstadoCombateParaAtaque(agora)
 	local now = agora or os.clock()
-	if (now - ultimoSyncCombateTick) < 0.4 then return end
+	if (now - ultimoSyncCombateTick) < 0.5 then return end
 	ultimoSyncCombateTick = now
 	local char = LocalPlayer.Character
 	local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -753,7 +756,7 @@ local function sincronizarNoAnimation()
 end
 
 -- ==========================================
--- INVISIVEL ESTAVEL SOB O CHAO (SEM SUBIR/LEVANTAR E SEM ATRAPALHAR ATAQUE)
+-- INVISIVEL (FIO MICROSCOPICO SEM CABECA/CORPO/NOME SOB O CHAO)
 -- ==========================================
 local function obterCachePartesPersonagem(char)
 	if not char then return {} end
@@ -798,7 +801,7 @@ local function garantirAncoraCamera()
 	return part
 end
 
-local function aplicarFioDeitadoSemCabecaEOcultarApenasMeuNome(char, hum, ativar, aplicarTamanhos)
+local function aplicarFioInvisivelSemNome(char, hum, ativar, aplicarTamanhos)
 	if not char then return end
 	local itens = obterCachePartesPersonagem(char)
 
@@ -837,8 +840,9 @@ local function aplicarFioDeitadoSemCabecaEOcultarApenasMeuNome(char, hum, ativar
 						if snapshotTamanhoInvisivel[desc] == nil then
 							snapshotTamanhoInvisivel[desc] = desc.Size
 						end
-						local alvoSize = (desc.Name == "Head") and Vector3.new(0.01, 0.01, 0.01)
-							or ((desc.Name == "HumanoidRootPart") and Vector3.new(0.2, 0.05, 0.2) or Vector3.new(0.02, 0.01, 0.02))
+						local alvoSize = (desc.Name == "HumanoidRootPart")
+							and Vector3.new(0.05, 0.005, 0.05)
+							or Vector3.new(0.005, 0.005, 0.005)
 						if desc.Size ~= alvoSize then
 							pcall(function() desc.Size = alvoSize end)
 						end
@@ -846,9 +850,16 @@ local function aplicarFioDeitadoSemCabecaEOcultarApenasMeuNome(char, hum, ativar
 					if snapshotTransparenciaInvisivel[desc] == nil then
 						snapshotTransparenciaInvisivel[desc] = desc.LocalTransparencyModifier
 					end
-					if desc.LocalTransparencyModifier ~= 1 or desc.CastShadow or desc.CanCollide then
+					if snapshotPartTranspInvisivel[desc] == nil then
+						snapshotPartTranspInvisivel[desc] = desc.Transparency
+					end
+					local transpAlvo = (desc.Name == "HumanoidRootPart") and 1 or 1
+					if desc.LocalTransparencyModifier ~= 1 or desc.Transparency ~= transpAlvo or desc.CastShadow or desc.CanCollide then
 						pcall(function()
 							desc.LocalTransparencyModifier = 1
+							if desc.Name ~= "HumanoidRootPart" then
+								desc.Transparency = transpAlvo
+							end
 							desc.CastShadow = false
 							desc.CanCollide = false
 						end)
@@ -872,6 +883,15 @@ local function aplicarFioDeitadoSemCabecaEOcultarApenasMeuNome(char, hum, ativar
 			end
 		end
 		table.clear(snapshotTransparenciaInvisivel)
+
+		for part, origTransp in pairs(snapshotPartTranspInvisivel) do
+			if part and part.Parent then
+				pcall(function()
+					part.Transparency = origTransp
+				end)
+			end
+		end
+		table.clear(snapshotPartTranspInvisivel)
 
 		for part, origSize in pairs(snapshotTamanhoInvisivel) do
 			if part and part.Parent then
@@ -1011,12 +1031,11 @@ local function atualizarInvisivelSubsolo(dt, agora)
 
 	local alturaLimiteVoid = workspace.FallenPartsDestroyHeight + 25
 	local yAbaixo = math.max(posSuperficieInvisivel.Y - INVISIVEL_PROFUNDIDADE, alturaLimiteVoid)
-	local cfFioDeitado = CFrame.new(posSuperficieInvisivel.X, yAbaixo, posSuperficieInvisivel.Z)
+	local cfFioSubsolo = CFrame.new(posSuperficieInvisivel.X, yAbaixo, posSuperficieInvisivel.Z)
 		* CFrame.fromEulerAnglesYXZ(0, yawSuperficieInvisivel, 0)
-		* CFrame.Angles(math.rad(90), 0, 0)
 
 	if hum.Sit then hum.Sit = false end
-	if not hum.PlatformStand then hum.PlatformStand = true end
+	if hum.PlatformStand then hum.PlatformStand = false end
 	if root.CanCollide then root.CanCollide = false end
 	if root.AssemblyLinearVelocity ~= Vector3.zero then
 		root.AssemblyLinearVelocity = Vector3.zero
@@ -1024,14 +1043,14 @@ local function atualizarInvisivelSubsolo(dt, agora)
 	if root.AssemblyAngularVelocity ~= Vector3.zero then
 		root.AssemblyAngularVelocity = Vector3.zero
 	end
-	root.CFrame = cfFioDeitado
+	root.CFrame = cfFioSubsolo
 
 	local now = agora or os.clock()
-	local aplicarTamanhos = (now - ultimoSyncTamanhoInvisivel) >= 0.45
+	local aplicarTamanhos = (now - ultimoSyncTamanhoInvisivel) >= 0.4
 	if aplicarTamanhos then
 		ultimoSyncTamanhoInvisivel = now
 	end
-	aplicarFioDeitadoSemCabecaEOcultarApenasMeuNome(char, hum, true, aplicarTamanhos)
+	aplicarFioInvisivelSemNome(char, hum, true, aplicarTamanhos)
 	sincronizarCameraInvisivel(hum, posSuperficieInvisivel)
 end
 
@@ -1047,7 +1066,7 @@ local function setInvisivelEstado(novoEstado)
 
 	if not invisivelAtivo then
 		destruirAncoraCamera()
-		aplicarFioDeitadoSemCabecaEOcultarApenasMeuNome(char, hum, false, false)
+		aplicarFioInvisivelSemNome(char, hum, false, false)
 		if root and posSuperficieInvisivel then
 			local cfVolta = CFrame.new(posSuperficieInvisivel.X, posSuperficieInvisivel.Y + 1.2, posSuperficieInvisivel.Z)
 				* CFrame.fromEulerAnglesYXZ(0, yawSuperficieInvisivel, 0)
@@ -1071,7 +1090,7 @@ local function setInvisivelEstado(novoEstado)
 			local _, yawAtual, _ = root.CFrame:ToEulerAnglesYXZ()
 			yawSuperficieInvisivel = yawAtual
 		end
-		aplicarFioDeitadoSemCabecaEOcultarApenasMeuNome(char, hum, true, true)
+		aplicarFioInvisivelSemNome(char, hum, true, true)
 		atualizarInvisivelSubsolo(0.016, os.clock())
 	end
 	garantirNomesEVidaOutrosJogadores(0)
@@ -1117,6 +1136,7 @@ local function recuperarEstadoAposQueda(novoChar)
 	ultimoCacheChar = nil
 	destruirAncoraCamera()
 	table.clear(snapshotTransparenciaInvisivel)
+	table.clear(snapshotPartTranspInvisivel)
 	table.clear(snapshotTamanhoInvisivel)
 	table.clear(snapshotDecalsInvisivel)
 	snapshotDisplayDistHum = nil
@@ -1705,16 +1725,43 @@ local function desviarMiraSeAmigoNaFrente(meuRoot)
 	local dz = inimigoAtrasOuPerto.Position.Z - meuRoot.Position.Z
 	if (dx * dx + dz * dz) > 0.0025 then
 		local yawDesejado = math.atan2(-dx, -dz)
-		pcall(function()
-			meuRoot.CFrame = CFrame.new(meuRoot.Position) * CFrame.fromEulerAnglesYXZ(0, yawDesejado, 0)
-		end)
+		meuRoot.CFrame = CFrame.new(meuRoot.Position) * CFrame.fromEulerAnglesYXZ(0, yawDesejado, 0)
 	end
 end
 
 -- ==========================================
--- SELECAO PERSISTENTE DO KILL AURA
+-- SELECAO DO KILL AURA COM CACHE LEVE (SEM QUEDA DE FPS)
 -- ==========================================
-local function obterAlvoKillAuraPersistente(meuRoot, raioMax)
+local function atualizarCacheAlvos(agora, meuRoot, raioMax)
+	if (agora - ultimoScanAlvosTick) < 0.04 then
+		return
+	end
+	ultimoScanAlvosTick = agora
+	table.clear(alvosElegiveisCache)
+
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if jogadorElegivelComoAlvo(plr) then
+			local char = plr.Character
+			if char then
+				local hum = char:FindFirstChildOfClass("Humanoid")
+				local root = char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
+				if hum and hum.Health > 0 and root and root.Parent then
+					local d = (root.Position - meuRoot.Position).Magnitude
+					if d <= (raioMax + MARGEM_PERSISTENCIA_KILL_AURA) and d > 0.1 then
+						table.insert(alvosElegiveisCache, {
+							plr = plr,
+							root = root,
+							hum = hum,
+							dist = d
+						})
+					end
+				end
+			end
+		end
+	end
+end
+
+local function obterAlvoKillAuraPersistente(meuRoot, raioMax, agora)
 	if not meuRoot then return nil, nil end
 
 	if pvpFocusLoopAtivo then
@@ -1727,13 +1774,15 @@ local function obterAlvoKillAuraPersistente(meuRoot, raioMax)
 		return nil, nil
 	end
 
+	atualizarCacheAlvos(agora, meuRoot, raioMax)
+
 	if alvoKillAuraPlayer and alvoKillAuraPlayer.Parent == Players and jogadorElegivelComoAlvo(alvoKillAuraPlayer) then
-		local _, rootTravado, humTravado = getCharAndRoot(alvoKillAuraPlayer)
-		if rootTravado and humTravado and humTravado.Health > 0 then
-			local distTravado = (rootTravado.Position - meuRoot.Position).Magnitude
-			local limitePersistencia = raioMax + MARGEM_PERSISTENCIA_KILL_AURA
-			if distTravado <= limitePersistencia and distTravado > 0.1 then
-				return rootTravado, alvoKillAuraPlayer
+		for _, item in ipairs(alvosElegiveisCache) do
+			if item.plr == alvoKillAuraPlayer and item.root and item.root.Parent and item.hum.Health > 0 then
+				local distAtual = (item.root.Position - meuRoot.Position).Magnitude
+				if distAtual <= (raioMax + MARGEM_PERSISTENCIA_KILL_AURA) and distAtual > 0.1 then
+					return item.root, alvoKillAuraPlayer
+				end
 			end
 		end
 		alvoKillAuraPlayer = nil
@@ -1743,20 +1792,15 @@ local function obterAlvoKillAuraPersistente(meuRoot, raioMax)
 	local melhorPlr = nil
 	local melhorPontuacao = math.huge
 
-	for _, plr in ipairs(Players:GetPlayers()) do
-		if jogadorElegivelComoAlvo(plr) then
-			local _, r, hum = getCharAndRoot(plr)
-			if r and hum and hum.Health > 0 then
-				local d = (r.Position - meuRoot.Position).Magnitude
-				if d <= raioMax and d > 0.1 then
-					local bonusCaido = jogadorEstaCaidoKnockdown(hum) and -12 or 0
-					local pontuacao = d + bonusCaido
-					if pontuacao < melhorPontuacao then
-						melhorPontuacao = pontuacao
-						melhorRoot = r
-						melhorPlr = plr
-					end
-				end
+	for _, item in ipairs(alvosElegiveisCache) do
+		local d = (item.root.Position - meuRoot.Position).Magnitude
+		if d <= raioMax and d > 0.1 then
+			local bonusCaido = jogadorEstaCaidoKnockdown(item.hum) and -12 or 0
+			local pontuacao = d + bonusCaido
+			if pontuacao < melhorPontuacao then
+				melhorPontuacao = pontuacao
+				melhorRoot = item.root
+				melhorPlr = item.plr
 			end
 		end
 	end
@@ -1790,11 +1834,9 @@ local function aplicarBackCostas()
 	local posFinal = Vector3.new(posCostas.X, meuRoot.Position.Y, posCostas.Z)
 	local destinoCFrame = CFrame.lookAt(posFinal, posFinal + lookInimigoPlano)
 
-	pcall(function()
-		meuRoot.AssemblyLinearVelocity = Vector3.zero
-		meuRoot.AssemblyAngularVelocity = Vector3.zero
-		meuRoot.CFrame = destinoCFrame
-	end)
+	meuRoot.AssemblyLinearVelocity = Vector3.zero
+	meuRoot.AssemblyAngularVelocity = Vector3.zero
+	meuRoot.CFrame = destinoCFrame
 end
 
 local function obterAlcanceAutoClick()
@@ -1837,16 +1879,12 @@ end
 local function executarCliqueRapido()
 	ignorarProximoDisparoHit = true
 	if typeof(mouse1click) == "function" then
-		pcall(mouse1click)
+		mouse1click()
 	else
-		pcall(function()
-			VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
-			VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
-		end)
+		VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+		VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
 	end
-	task.defer(function()
-		ignorarProximoDisparoHit = false
-	end)
+	ignorarProximoDisparoHit = false
 end
 
 local function dispararPulsoAtaque(char, meuRoot, agora, ativarTool)
@@ -1860,9 +1898,7 @@ local function dispararPulsoAtaque(char, meuRoot, agora, ativarTool)
 			if not tool.Enabled then
 				tool.Enabled = true
 			end
-			pcall(function()
-				tool:Activate()
-			end)
+			tool:Activate()
 		end
 	end
 	executarCliqueRapido()
@@ -1883,7 +1919,7 @@ local function processarKillAuraFrame(agora)
 	end
 
 	local alcanceEfetivo = hitboxAtivo and math.max(DISTANCIA_KILL_AURA, hitboxSize + 6) or (DISTANCIA_KILL_AURA + (invisivelAtivo and 10 or 0))
-	local alvoProximo = obterAlvoKillAuraPersistente(meuRoot, alcanceEfetivo)
+	local alvoProximo = obterAlvoKillAuraPersistente(meuRoot, alcanceEfetivo, agora)
 	if not alvoProximo then
 		pulsoMiraAte = 0
 		yawAntesPulso = nil
@@ -1903,9 +1939,7 @@ local function processarKillAuraFrame(agora)
 		if (dx * dx + dz * dz) > 0.0025 then
 			local yawAlvo = math.atan2(-dx, -dz)
 			yawAplicadoNoPulso = yawAlvo
-			pcall(function()
-				meuRoot.CFrame = CFrame.new(meuRoot.Position) * CFrame.fromEulerAnglesYXZ(0, yawAlvo, 0)
-			end)
+			meuRoot.CFrame = CFrame.new(meuRoot.Position) * CFrame.fromEulerAnglesYXZ(0, yawAlvo, 0)
 			pulsoMiraAte = agora + DURACAO_PULSO_MIRA
 		end
 	end
@@ -1946,9 +1980,7 @@ local function restaurarPulsoMiraKillAura()
 	if meuRoot and yawAplicadoNoPulso ~= nil then
 		local _, yawAgora, _ = meuRoot.CFrame:ToEulerAnglesYXZ()
 		if math.abs(normalizarAngulo(yawAgora - yawAplicadoNoPulso)) < 0.04 then
-			pcall(function()
-				meuRoot.CFrame = CFrame.new(meuRoot.Position) * CFrame.fromEulerAnglesYXZ(0, yawAntesPulso, 0)
-			end)
+			meuRoot.CFrame = CFrame.new(meuRoot.Position) * CFrame.fromEulerAnglesYXZ(0, yawAntesPulso, 0)
 		end
 	end
 	yawAntesPulso = nil
@@ -2982,4 +3014,4 @@ Players.PlayerRemoving:Connect(function(plr)
 	limparMarcador(plr)
 end)
 
-print("[The VOID Painel] Kill Aura otimizado, Invisivel estavel e nomes/vida dos outros preservados!")
+print("[The VOID Painel] Invisivel em fio sob o chao, Kill Aura com cache leve e assimetria de dano preservada!")
