@@ -87,7 +87,7 @@ local KILL_AURA_PADRAO_ATIVO = false
 local FIGHTING_PADRAO_ATIVO = false
 local NO_ANIMATION_PADRAO_ATIVO = false
 local INVISIVEL_PADRAO_ATIVO = false
-local INVISIVEL_PROFUNDIDADE = 4.5
+local INVISIVEL_PROFUNDIDADE = 5.5
 local HUD_LOSANGO_PADRAO_VISIVEL = true
 local HUD_STATS_PADRAO_VISIVEL = true
 local SPEED_CFRAME_PADRAO_ATIVO = false
@@ -136,12 +136,17 @@ local invisivelAtivo = INVISIVEL_PADRAO_ATIVO
 local posSuperficieInvisivel = nil
 local yawSuperficieInvisivel = 0
 local ancoraCameraInvisivel = nil
+
 local snapshotTransparenciaInvisivel = {}
 local snapshotPartTranspInvisivel = {}
 local snapshotTamanhoInvisivel = {}
 local snapshotDecalsInvisivel = {}
+local snapshotMeshesInvisivel = {}
+local snapshotRoupasInvisivel = {}
+local snapshotGuisInvisivel = {}
 local snapshotDisplayDistHum = nil
 local snapshotDisplayNameHum = nil
+
 local partesPersonagemCache = {}
 local ultimoCacheChar = nil
 local hudLosangoVisivel = HUD_LOSANGO_PADRAO_VISIVEL
@@ -756,7 +761,7 @@ local function sincronizarNoAnimation()
 end
 
 -- ==========================================
--- INVISIVEL (FIO MICROSCOPICO SEM CABECA/CORPO/NOME SOB O CHAO)
+-- INVISIVEL (FIO MINIMO + SEM ACESSORIOS/ROUPA/NOME DEITADO SOB O CHAO)
 -- ==========================================
 local function obterCachePartesPersonagem(char)
 	if not char then return {} end
@@ -766,7 +771,15 @@ local function obterCachePartesPersonagem(char)
 	ultimoCacheChar = char
 	table.clear(partesPersonagemCache)
 	for _, desc in ipairs(char:GetDescendants()) do
-		if desc:IsA("BasePart") or desc:IsA("Decal") or desc:IsA("Texture") then
+		if desc:IsA("BasePart")
+			or desc:IsA("Decal")
+			or desc:IsA("Texture")
+			or desc:IsA("SpecialMesh")
+			or desc:IsA("Shirt")
+			or desc:IsA("Pants")
+			or desc:IsA("ShirtGraphic")
+			or desc:IsA("CharacterMesh")
+			or desc:IsA("BillboardGui") then
 			table.insert(partesPersonagemCache, desc)
 		end
 	end
@@ -801,7 +814,19 @@ local function garantirAncoraCamera()
 	return part
 end
 
-local function aplicarFioInvisivelSemNome(char, hum, ativar, aplicarTamanhos)
+local function limparSnapshotsInvisivel()
+	table.clear(snapshotTransparenciaInvisivel)
+	table.clear(snapshotPartTranspInvisivel)
+	table.clear(snapshotTamanhoInvisivel)
+	table.clear(snapshotDecalsInvisivel)
+	table.clear(snapshotMeshesInvisivel)
+	table.clear(snapshotRoupasInvisivel)
+	table.clear(snapshotGuisInvisivel)
+	snapshotDisplayDistHum = nil
+	snapshotDisplayNameHum = nil
+end
+
+local function aplicarFioTotalInvisivel(char, hum, ativar, aplicarTamanhos)
 	if not char then return end
 	local itens = obterCachePartesPersonagem(char)
 
@@ -821,15 +846,9 @@ local function aplicarFioInvisivelSemNome(char, hum, ativar, aplicarTamanhos)
 				end)
 			end
 			pcall(function()
-				if hum.NameDisplayDistance ~= Enum.HumanoidDisplayDistanceType.None then
-					hum.NameDisplayDistance = Enum.HumanoidDisplayDistanceType.None
-				end
-				if hum.HealthDisplayDistance ~= Enum.HumanoidDisplayDistanceType.None then
-					hum.HealthDisplayDistance = Enum.HumanoidDisplayDistanceType.None
-				end
-				if hum.DisplayName ~= "" then
-					hum.DisplayName = ""
-				end
+				hum.NameDisplayDistance = Enum.HumanoidDisplayDistanceType.None
+				hum.HealthDisplayDistance = Enum.HumanoidDisplayDistanceType.None
+				hum.DisplayName = ""
 			end)
 		end
 
@@ -841,8 +860,8 @@ local function aplicarFioInvisivelSemNome(char, hum, ativar, aplicarTamanhos)
 							snapshotTamanhoInvisivel[desc] = desc.Size
 						end
 						local alvoSize = (desc.Name == "HumanoidRootPart")
-							and Vector3.new(0.05, 0.005, 0.05)
-							or Vector3.new(0.005, 0.005, 0.005)
+							and Vector3.new(0.01, 0.001, 0.01)
+							or Vector3.new(0.001, 0.001, 0.001)
 						if desc.Size ~= alvoSize then
 							pcall(function() desc.Size = alvoSize end)
 						end
@@ -853,16 +872,20 @@ local function aplicarFioInvisivelSemNome(char, hum, ativar, aplicarTamanhos)
 					if snapshotPartTranspInvisivel[desc] == nil then
 						snapshotPartTranspInvisivel[desc] = desc.Transparency
 					end
-					local transpAlvo = (desc.Name == "HumanoidRootPart") and 1 or 1
-					if desc.LocalTransparencyModifier ~= 1 or desc.Transparency ~= transpAlvo or desc.CastShadow or desc.CanCollide then
+					if desc.LocalTransparencyModifier ~= 1 or desc.Transparency ~= 1 or desc.CastShadow or desc.CanCollide then
 						pcall(function()
 							desc.LocalTransparencyModifier = 1
-							if desc.Name ~= "HumanoidRootPart" then
-								desc.Transparency = transpAlvo
-							end
+							desc.Transparency = 1
 							desc.CastShadow = false
 							desc.CanCollide = false
 						end)
+					end
+				elseif desc:IsA("SpecialMesh") then
+					if snapshotMeshesInvisivel[desc] == nil then
+						snapshotMeshesInvisivel[desc] = desc.Scale
+					end
+					if desc.Scale ~= Vector3.zero then
+						pcall(function() desc.Scale = Vector3.zero end)
 					end
 				elseif desc:IsA("Decal") or desc:IsA("Texture") then
 					if snapshotDecalsInvisivel[desc] == nil then
@@ -870,6 +893,34 @@ local function aplicarFioInvisivelSemNome(char, hum, ativar, aplicarTamanhos)
 					end
 					if desc.Transparency ~= 1 then
 						pcall(function() desc.Transparency = 1 end)
+					end
+				elseif desc:IsA("Shirt") or desc:IsA("Pants") then
+					if snapshotRoupasInvisivel[desc] == nil then
+						snapshotRoupasInvisivel[desc] = { tipo = "ShirtOrPants", template = desc.Parent }
+					end
+					if desc.Parent ~= nil then
+						pcall(function() desc.Parent = nil end)
+					end
+				elseif desc:IsA("ShirtGraphic") then
+					if snapshotRoupasInvisivel[desc] == nil then
+						snapshotRoupasInvisivel[desc] = { tipo = "ShirtGraphic", template = desc.Parent }
+					end
+					if desc.Parent ~= nil then
+						pcall(function() desc.Parent = nil end)
+					end
+				elseif desc:IsA("CharacterMesh") then
+					if snapshotRoupasInvisivel[desc] == nil then
+						snapshotRoupasInvisivel[desc] = { tipo = "CharacterMesh", template = desc.Parent }
+					end
+					if desc.Parent ~= nil then
+						pcall(function() desc.Parent = nil end)
+					end
+				elseif desc:IsA("BillboardGui") then
+					if snapshotGuisInvisivel[desc] == nil then
+						snapshotGuisInvisivel[desc] = desc.Enabled
+					end
+					if desc.Enabled then
+						pcall(function() desc.Enabled = false end)
 					end
 				end
 			end
@@ -882,8 +933,6 @@ local function aplicarFioInvisivelSemNome(char, hum, ativar, aplicarTamanhos)
 				end)
 			end
 		end
-		table.clear(snapshotTransparenciaInvisivel)
-
 		for part, origTransp in pairs(snapshotPartTranspInvisivel) do
 			if part and part.Parent then
 				pcall(function()
@@ -891,8 +940,6 @@ local function aplicarFioInvisivelSemNome(char, hum, ativar, aplicarTamanhos)
 				end)
 			end
 		end
-		table.clear(snapshotPartTranspInvisivel)
-
 		for part, origSize in pairs(snapshotTamanhoInvisivel) do
 			if part and part.Parent then
 				pcall(function()
@@ -900,8 +947,13 @@ local function aplicarFioInvisivelSemNome(char, hum, ativar, aplicarTamanhos)
 				end)
 			end
 		end
-		table.clear(snapshotTamanhoInvisivel)
-
+		for mesh, origScale in pairs(snapshotMeshesInvisivel) do
+			if mesh and mesh.Parent then
+				pcall(function()
+					mesh.Scale = origScale
+				end)
+			end
+		end
 		for decal, origTransp in pairs(snapshotDecalsInvisivel) do
 			if decal and decal.Parent then
 				pcall(function()
@@ -909,7 +961,22 @@ local function aplicarFioInvisivelSemNome(char, hum, ativar, aplicarTamanhos)
 				end)
 			end
 		end
-		table.clear(snapshotDecalsInvisivel)
+		for inst, info in pairs(snapshotRoupasInvisivel) do
+			if inst and info and info.template and info.template.Parent then
+				pcall(function()
+					inst.Parent = info.template
+				end)
+			end
+		end
+		for gui, origEnabled in pairs(snapshotGuisInvisivel) do
+			if gui and gui.Parent then
+				pcall(function()
+					gui.Enabled = origEnabled
+				end)
+			end
+		end
+
+		limparSnapshotsInvisivel()
 
 		if hum then
 			pcall(function()
@@ -921,8 +988,6 @@ local function aplicarFioInvisivelSemNome(char, hum, ativar, aplicarTamanhos)
 					hum.DisplayName = snapshotDisplayNameHum
 				end
 			end)
-			snapshotDisplayDistHum = nil
-			snapshotDisplayNameHum = nil
 		end
 	end
 end
@@ -1031,8 +1096,9 @@ local function atualizarInvisivelSubsolo(dt, agora)
 
 	local alturaLimiteVoid = workspace.FallenPartsDestroyHeight + 25
 	local yAbaixo = math.max(posSuperficieInvisivel.Y - INVISIVEL_PROFUNDIDADE, alturaLimiteVoid)
-	local cfFioSubsolo = CFrame.new(posSuperficieInvisivel.X, yAbaixo, posSuperficieInvisivel.Z)
+	local cfFioDeitadoSubsolo = CFrame.new(posSuperficieInvisivel.X, yAbaixo, posSuperficieInvisivel.Z)
 		* CFrame.fromEulerAnglesYXZ(0, yawSuperficieInvisivel, 0)
+		* CFrame.Angles(math.rad(90), 0, 0)
 
 	if hum.Sit then hum.Sit = false end
 	if hum.PlatformStand then hum.PlatformStand = false end
@@ -1043,14 +1109,14 @@ local function atualizarInvisivelSubsolo(dt, agora)
 	if root.AssemblyAngularVelocity ~= Vector3.zero then
 		root.AssemblyAngularVelocity = Vector3.zero
 	end
-	root.CFrame = cfFioSubsolo
+	root.CFrame = cfFioDeitadoSubsolo
 
 	local now = agora or os.clock()
 	local aplicarTamanhos = (now - ultimoSyncTamanhoInvisivel) >= 0.4
 	if aplicarTamanhos then
 		ultimoSyncTamanhoInvisivel = now
 	end
-	aplicarFioInvisivelSemNome(char, hum, true, aplicarTamanhos)
+	aplicarFioTotalInvisivel(char, hum, true, aplicarTamanhos)
 	sincronizarCameraInvisivel(hum, posSuperficieInvisivel)
 end
 
@@ -1066,7 +1132,7 @@ local function setInvisivelEstado(novoEstado)
 
 	if not invisivelAtivo then
 		destruirAncoraCamera()
-		aplicarFioInvisivelSemNome(char, hum, false, false)
+		aplicarFioTotalInvisivel(char, hum, false, false)
 		if root and posSuperficieInvisivel then
 			local cfVolta = CFrame.new(posSuperficieInvisivel.X, posSuperficieInvisivel.Y + 1.2, posSuperficieInvisivel.Z)
 				* CFrame.fromEulerAnglesYXZ(0, yawSuperficieInvisivel, 0)
@@ -1090,7 +1156,7 @@ local function setInvisivelEstado(novoEstado)
 			local _, yawAtual, _ = root.CFrame:ToEulerAnglesYXZ()
 			yawSuperficieInvisivel = yawAtual
 		end
-		aplicarFioInvisivelSemNome(char, hum, true, true)
+		aplicarFioTotalInvisivel(char, hum, true, true)
 		atualizarInvisivelSubsolo(0.016, os.clock())
 	end
 	garantirNomesEVidaOutrosJogadores(0)
@@ -1135,12 +1201,7 @@ local function recuperarEstadoAposQueda(novoChar)
 	posSuperficieInvisivel = nil
 	ultimoCacheChar = nil
 	destruirAncoraCamera()
-	table.clear(snapshotTransparenciaInvisivel)
-	table.clear(snapshotPartTranspInvisivel)
-	table.clear(snapshotTamanhoInvisivel)
-	table.clear(snapshotDecalsInvisivel)
-	snapshotDisplayDistHum = nil
-	snapshotDisplayNameHum = nil
+	limparSnapshotsInvisivel()
 	local humNovo = novoChar and novoChar:FindFirstChildOfClass("Humanoid")
 	sincronizarCameraInvisivel(humNovo, nil)
 	janelaRegistroHitAte = 0
@@ -3014,4 +3075,4 @@ Players.PlayerRemoving:Connect(function(plr)
 	limparMarcador(plr)
 end)
 
-print("[The VOID Painel] Invisivel em fio sob o chao, Kill Aura com cache leve e assimetria de dano preservada!")
+print("[The VOID Painel] Invisivel deitado sob o chao com partes/meshes/roupas/nome ocultos!")
