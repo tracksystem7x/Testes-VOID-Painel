@@ -80,7 +80,7 @@ local KILL_AURA_PADRAO_ATIVO = false
 local FIGHTING_PADRAO_ATIVO = false
 local NO_ANIMATION_PADRAO_ATIVO = false
 local INVISIVEL_PADRAO_ATIVO = false
-local INVISIVEL_PROFUNDIDADE = EH_HIGHSCHOOL_RP and 6.5 or 6.0
+local INVISIVEL_PROFUNDIDADE = EH_HIGHSCHOOL_RP and 3.4 or 3.2
 local HUD_LOSANGO_PADRAO_VISIVEL = true
 local HUD_STATS_PADRAO_VISIVEL = true
 local SPEED_CFRAME_PADRAO_ATIVO = false
@@ -127,8 +127,9 @@ local killAuraAtivo = KILL_AURA_PADRAO_ATIVO
 local fightingAtivo = FIGHTING_PADRAO_ATIVO
 local noAnimationAtivo = NO_ANIMATION_PADRAO_ATIVO
 local invisivelAtivo = INVISIVEL_PADRAO_ATIVO
-local cframeSuperficieInvisivel = nil
-local desyncSubsoloAplicado = false
+local posSuperficieInvisivel = nil
+local yawSuperficieInvisivel = 0
+local ancoraCameraInvisivel = nil
 local snapshotTransparenciaInvisivel = {}
 local hudLosangoVisivel = HUD_LOSANGO_PADRAO_VISIVEL
 local hudStatsVisivel = HUD_STATS_PADRAO_VISIVEL
@@ -708,8 +709,36 @@ local function sincronizarNoAnimation()
 end
 
 -- ==========================================
--- INVISIVEL (DEITADO ABAIXO DO CHAO + CAMERA NORMAL ACIMA)
+-- INVISIVEL (CORPO DEITADO SOB O CHAO + MOVIMENTO LIVRE + CAMERA ACIMA)
 -- ==========================================
+local function destruirAncoraCamera()
+	if ancoraCameraInvisivel then
+		pcall(function()
+			ancoraCameraInvisivel:Destroy()
+		end)
+		ancoraCameraInvisivel = nil
+	end
+end
+
+local function garantirAncoraCamera()
+	if ancoraCameraInvisivel and ancoraCameraInvisivel.Parent then
+		return ancoraCameraInvisivel
+	end
+	destruirAncoraCamera()
+	local part = Instance.new("Part")
+	part.Name = "VoidInvisCamAnchor"
+	part.Size = Vector3.new(1, 1, 1)
+	part.Transparency = 1
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanTouch = false
+	part.CanQuery = false
+	part.CastShadow = false
+	part.Parent = workspace
+	ancoraCameraInvisivel = part
+	return part
+end
+
 local function aplicarVisualFantasmaLocal(char, ativar)
 	if not char then return end
 	if ativar then
@@ -735,11 +764,22 @@ local function aplicarVisualFantasmaLocal(char, ativar)
 	end
 end
 
-local function garantirCameraNativaInvisivel()
+local function sincronizarCameraInvisivel(hum, posSuperficie)
 	local cam = workspace.CurrentCamera
-	local char = LocalPlayer.Character
-	local hum = char and char:FindFirstChildOfClass("Humanoid")
-	if cam then
+	if not cam then return end
+	if invisivelAtivo and posSuperficie then
+		local anc = garantirAncoraCamera()
+		pcall(function()
+			anc.CFrame = CFrame.new(posSuperficie.X, posSuperficie.Y + 1.5, posSuperficie.Z)
+			if cam.CameraType ~= Enum.CameraType.Custom then
+				cam.CameraType = Enum.CameraType.Custom
+			end
+			if cam.CameraSubject ~= anc then
+				cam.CameraSubject = anc
+			end
+		end)
+	else
+		destruirAncoraCamera()
 		pcall(function()
 			if cam.CameraType == Enum.CameraType.Scriptable then
 				cam.CameraType = Enum.CameraType.Custom
@@ -751,66 +791,139 @@ local function garantirCameraNativaInvisivel()
 	end
 end
 
-local function restaurarSuperficieAntesDoRender()
-	local char = LocalPlayer.Character
-	if invisivelAtivo and char then
-		aplicarVisualFantasmaLocal(char, true)
-		garantirCameraNativaInvisivel()
+local function obterInputMovimentoPlano()
+	local dir = Vector3.zero
+	local cam = workspace.CurrentCamera
+	if cam then
+		local forward = Vector3.new(cam.CFrame.LookVector.X, 0, cam.CFrame.LookVector.Z)
+		local right = Vector3.new(cam.CFrame.RightVector.X, 0, cam.CFrame.RightVector.Z)
+		if forward.Magnitude > 0.001 then forward = forward.Unit else forward = Vector3.new(0, 0, -1) end
+		if right.Magnitude > 0.001 then right = right.Unit else right = Vector3.new(1, 0, 0) end
+
+		if not UserInputService:GetFocusedTextBox() then
+			if UserInputService:IsKeyDown(Enum.KeyCode.W) or UserInputService:IsKeyDown(Enum.KeyCode.Up) then
+				dir += forward
+			end
+			if UserInputService:IsKeyDown(Enum.KeyCode.S) or UserInputService:IsKeyDown(Enum.KeyCode.Down) then
+				dir -= forward
+			end
+			if UserInputService:IsKeyDown(Enum.KeyCode.D) or UserInputService:IsKeyDown(Enum.KeyCode.Right) then
+				dir += right
+			end
+			if UserInputService:IsKeyDown(Enum.KeyCode.A) or UserInputService:IsKeyDown(Enum.KeyCode.Left) then
+				dir -= right
+			end
+		end
 	end
+
+	if dir.Magnitude <= 0.01 then
+		local char = LocalPlayer.Character
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		local md = hum and hum.MoveDirection or Vector3.zero
+		local plano = Vector3.new(md.X, 0, md.Z)
+		if plano.Magnitude > 0.01 then
+			dir = plano.Unit
+		end
+	end
+
+	if dir.Magnitude > 0.01 then
+		return dir.Unit
+	end
+	return Vector3.zero
 end
 
-local function aplicarInvisivelDesyncHeartbeat()
+local function atualizarInvisivelSubsolo(dt)
+	local char = LocalPlayer.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	local root = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
+
 	if not invisivelAtivo then
-		desyncSubsoloAplicado = false
+		sincronizarCameraInvisivel(hum, nil)
 		return
 	end
 
-	local char = LocalPlayer.Character
-	if not char then return end
-	local hum = char:FindFirstChildOfClass("Humanoid")
-	if hum and hum.Health <= 0 then return end
-	local root = char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
-	if not root then return end
+	if not char or not hum or hum.Health <= 0 or not root then
+		sincronizarCameraInvisivel(hum, nil)
+		return
+	end
 
-	local yAtual = root.Position.Y
-	if not desyncSubsoloAplicado or not cframeSuperficieInvisivel then
-		cframeSuperficieInvisivel = CFrame.new(root.Position.X, yAtual, root.Position.Z)
+	if not posSuperficieInvisivel then
+		posSuperficieInvisivel = root.Position
+		local _, yawAtual, _ = root.CFrame:ToEulerAnglesYXZ()
+		yawSuperficieInvisivel = yawAtual
+	end
+
+	local velHorizontal = WALKSPEED_BASE + (speedCFrameAtivo and math.max(0, speedCFrameValor - 1) or 0)
+	local passoPlano = obterInputMovimentoPlano()
+	if passoPlano.Magnitude > 0.01 then
+		local desloc = passoPlano * (velHorizontal * math.clamp(dt or 0.016, 0.001, 0.05))
+		posSuperficieInvisivel = Vector3.new(
+			posSuperficieInvisivel.X + desloc.X,
+			posSuperficieInvisivel.Y,
+			posSuperficieInvisivel.Z + desloc.Z
+		)
+		yawSuperficieInvisivel = math.atan2(-passoPlano.X, -passoPlano.Z)
 	else
-		cframeSuperficieInvisivel = CFrame.new(root.Position.X, math.max(cframeSuperficieInvisivel.Position.Y, yAtual + INVISIVEL_PROFUNDIDADE), root.Position.Z)
+		local cam = workspace.CurrentCamera
+		if cam then
+			local lookPlano = Vector3.new(cam.CFrame.LookVector.X, 0, cam.CFrame.LookVector.Z)
+			if lookPlano.Magnitude > 0.01 then
+				yawSuperficieInvisivel = math.atan2(-lookPlano.X, -lookPlano.Z)
+			end
+		end
 	end
 
 	local alturaLimiteVoid = workspace.FallenPartsDestroyHeight + 25
-	local yAbaixoDoChao = math.max(yAtual - INVISIVEL_PROFUNDIDADE, alturaLimiteVoid)
-	local _, yawAtual, _ = root.CFrame:ToEulerAnglesYXZ()
-	local orientacaoDeitada = CFrame.fromEulerAnglesYXZ(0, yawAtual, 0) * CFrame.Angles(math.rad(88), 0, 0)
+	local yAbaixo = math.max(posSuperficieInvisivel.Y - INVISIVEL_PROFUNDIDADE, alturaLimiteVoid)
+	local cfDeitadoAbaixo = CFrame.new(posSuperficieInvisivel.X, yAbaixo, posSuperficieInvisivel.Z)
+		* CFrame.fromEulerAnglesYXZ(0, yawSuperficieInvisivel, 0)
+		* CFrame.Angles(math.rad(86), 0, 0)
 
 	pcall(function()
-		root.CFrame = CFrame.new(root.Position.X, yAbaixoDoChao, root.Position.Z) * orientacaoDeitada
+		if hum.Sit then hum.Sit = false end
+		if hum.PlatformStand then hum.PlatformStand = false end
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
+		root.CFrame = cfDeitadoAbaixo
 	end)
-	desyncSubsoloAplicado = true
-	garantirCameraNativaInvisivel()
+
+	aplicarVisualFantasmaLocal(char, true)
+	sincronizarCameraInvisivel(hum, posSuperficieInvisivel)
 end
 
 local function setInvisivelEstado(novoEstado)
 	invisivelAtivo = novoEstado
+	local char = LocalPlayer.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	local root = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
+
 	if not invisivelAtivo then
-		desyncSubsoloAplicado = false
-		cframeSuperficieInvisivel = nil
-		aplicarVisualFantasmaLocal(LocalPlayer.Character, false)
-		garantirCameraNativaInvisivel()
-	else
-		local char = LocalPlayer.Character
-		local root = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
-		if root then
-			cframeSuperficieInvisivel = CFrame.new(root.Position.X, root.Position.Y, root.Position.Z)
+		destruirAncoraCamera()
+		aplicarVisualFantasmaLocal(char, false)
+		if root and posSuperficieInvisivel then
+			local cfVolta = CFrame.new(posSuperficieInvisivel.X, posSuperficieInvisivel.Y + 1.2, posSuperficieInvisivel.Z)
+				* CFrame.fromEulerAnglesYXZ(0, yawSuperficieInvisivel, 0)
 			pcall(function()
-				local _, yawAtual, _ = root.CFrame:ToEulerAnglesYXZ()
-				root.CFrame = CFrame.new(root.Position.X, root.Position.Y - INVISIVEL_PROFUNDIDADE, root.Position.Z) * CFrame.fromEulerAnglesYXZ(0, yawAtual, 0) * CFrame.Angles(math.rad(88), 0, 0)
+				if hum then
+					hum.Sit = false
+					hum.PlatformStand = false
+					hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+				end
+				root.AssemblyLinearVelocity = Vector3.zero
+				root.AssemblyAngularVelocity = Vector3.zero
+				root.CFrame = cfVolta
 			end)
-			desyncSubsoloAplicado = true
+		end
+		posSuperficieInvisivel = nil
+		sincronizarCameraInvisivel(hum, nil)
+	else
+		if root then
+			posSuperficieInvisivel = root.Position
+			local _, yawAtual, _ = root.CFrame:ToEulerAnglesYXZ()
+			yawSuperficieInvisivel = yawAtual
 		end
 		aplicarVisualFantasmaLocal(char, true)
-		garantirCameraNativaInvisivel()
+		atualizarInvisivelSubsolo(0.016)
 	end
 end
 
@@ -823,8 +936,8 @@ local function registrarMorteSeNecessario(char)
 	if not targetChar then return end
 	local root = targetChar:FindFirstChild("HumanoidRootPart") or targetChar.PrimaryPart
 	if root then
-		local cfSalvar = (invisivelAtivo and cframeSuperficieInvisivel) or root.CFrame
-		ultimaPosicaoMorte = cfSalvar + Vector3.new(0, 3, 0)
+		local posBase = (invisivelAtivo and posSuperficieInvisivel) or root.Position
+		ultimaPosicaoMorte = CFrame.new(posBase.X, posBase.Y + 3, posBase.Z)
 		morteRegistradaNestaVida = true
 	end
 end
@@ -850,10 +963,11 @@ local function recuperarEstadoAposQueda(novoChar)
 	alvoAtual = nil
 	alvoPvpLoopPlayer = nil
 	alvoKillAuraPlayer = nil
-	cframeSuperficieInvisivel = nil
-	desyncSubsoloAplicado = false
+	posSuperficieInvisivel = nil
+	destruirAncoraCamera()
 	table.clear(snapshotTransparenciaInvisivel)
-	garantirCameraNativaInvisivel()
+	local humNovo = novoChar and novoChar:FindFirstChildOfClass("Humanoid")
+	sincronizarCameraInvisivel(humNovo, nil)
 	janelaRegistroHitAte = 0
 	pulsoMiraAte = 0
 	yawAntesPulso = nil
@@ -1164,6 +1278,10 @@ local function executarPassoCFrameOriginal(meuRoot, hum, dt)
 end
 
 local function aplicarSpeedMultiModo(dt)
+	if invisivelAtivo then
+		restaurarWalkSpeedSeNecessario()
+		return
+	end
 	if not speedCFrameAtivo then
 		restaurarWalkSpeedSeNecessario()
 		return
@@ -2671,7 +2789,6 @@ local ultimoFpsExibido = nil
 local ultimoPingExibido = nil
 
 RunService.RenderStepped:Connect(function(dt)
-	restaurarSuperficieAntesDoRender()
 	if pvpFocusLoopAtivo and not alvoPvpLoopPlayer and os.clock() <= janelaRegistroHitAte then
 		registrarAlvoPvpPorHit()
 	end
@@ -2707,7 +2824,7 @@ RunService.Heartbeat:Connect(function(dt)
 
 	local killAuraAtacou = processarKillAuraFrame(agora)
 	processarAutoClickFrame(agora, killAuraAtacou)
-	aplicarInvisivelDesyncHeartbeat()
+	atualizarInvisivelSubsolo(dt)
 end)
 
 task.spawn(function()
