@@ -1116,10 +1116,16 @@ local function fixarRootAbaixoChao(root, hum)
 		if hum then
 			if hum.Sit then hum.Sit = false end
 			if hum.PlatformStand then hum.PlatformStand = false end
+			if hum.Jump then hum.Jump = false end
 		end
 		if root.CanCollide then root.CanCollide = false end
-		root.AssemblyLinearVelocity = Vector3.zero
-		root.AssemblyAngularVelocity = Vector3.zero
+		local vel = root.AssemblyLinearVelocity
+		if vel.Magnitude > 0.01 or vel.Y > 0 then
+			root.AssemblyLinearVelocity = Vector3.zero
+		end
+		if root.AssemblyAngularVelocity.Magnitude > 0.01 then
+			root.AssemblyAngularVelocity = Vector3.zero
+		end
 		root.RotVelocity = Vector3.zero
 		root.CFrame = cfFioDeitadoSubsolo
 	end)
@@ -1146,16 +1152,18 @@ local function atualizarInvisivelSubsolo(dt, agora)
 		yawSuperficieInvisivel = yawAtual
 	end
 
-	local velHorizontal = WALKSPEED_BASE + (speedCFrameAtivo and math.min(24, math.max(0, speedCFrameValor - 1)) or 0)
-	local passoPlano = obterInputMovimentoPlano()
-	if passoPlano.Magnitude > 0.01 then
-		local desloc = passoPlano * (velHorizontal * math.clamp(dt or 0.016, 0.001, 0.05))
-		posSuperficieInvisivel = Vector3.new(
-			posSuperficieInvisivel.X + desloc.X,
-			posSuperficieInvisivel.Y,
-			posSuperficieInvisivel.Z + desloc.Z
-		)
-		yawSuperficieInvisivel = math.atan2(-passoPlano.X, -passoPlano.Z)
+	if dt and dt > 0 then
+		local velHorizontal = WALKSPEED_BASE + (speedCFrameAtivo and math.min(24, math.max(0, speedCFrameValor - 1)) or 0)
+		local passoPlano = obterInputMovimentoPlano()
+		if passoPlano.Magnitude > 0.01 then
+			local desloc = passoPlano * (velHorizontal * math.clamp(dt, 0.001, 0.05))
+			posSuperficieInvisivel = Vector3.new(
+				posSuperficieInvisivel.X + desloc.X,
+				posSuperficieInvisivel.Y,
+				posSuperficieInvisivel.Z + desloc.Z
+			)
+			yawSuperficieInvisivel = math.atan2(-passoPlano.X, -passoPlano.Z)
+		end
 	end
 
 	fixarRootAbaixoChao(root, hum)
@@ -1373,7 +1381,7 @@ end
 -- NO SLOW
 -- ==========================================
 local function aplicarNoSlow()
-	if not noSlowAtivo then return end
+	if not noSlowAtivo or invisivelAtivo then return end
 
 	local char, _, hum = getCharAndRoot(LocalPlayer)
 	if not char or not hum then return end
@@ -1397,6 +1405,7 @@ local function calcularJumpPowerRegulado(baseJp, valorSlider)
 end
 
 local function aplicarJumpMultiplicador()
+	if invisivelAtivo then return end
 	local char, _, hum = getCharAndRoot(LocalPlayer)
 	if not char or not hum then return end
 
@@ -1424,7 +1433,7 @@ end
 -- ANTI-RAGDOLL E ANTI GRAB RAG
 -- ==========================================
 local function aplicarAntiRagdoll()
-	if not antiRagdollAtivo then return end
+	if not antiRagdollAtivo or invisivelAtivo then return end
 
 	local char, root, hum = getCharAndRoot(LocalPlayer)
 	if not char or not hum then return end
@@ -1448,7 +1457,7 @@ local function aplicarAntiRagdoll()
 end
 
 local function aplicarAntiGrabRag()
-	if not antiGrabRagAtivo then return end
+	if not antiGrabRagAtivo or invisivelAtivo then return end
 
 	local char, root, hum = getCharAndRoot(LocalPlayer)
 	if not char or not hum then return end
@@ -2002,7 +2011,9 @@ local function executarCliqueRapido()
 end
 
 local function dispararPulsoAtaque(char, meuRoot, agora, ativarTool)
-	garantirEstadoCombateParaAtaque(agora)
+	if not invisivelAtivo then
+		garantirEstadoCombateParaAtaque(agora)
+	end
 	if meuRoot and not pvpFocusLoopAtivo and not invisivelAtivo then
 		desviarMiraSeAmigoNaFrente(meuRoot)
 	end
@@ -3082,6 +3093,9 @@ RunService.RenderStepped:Connect(function(dt)
 	aplicarFocoNoAlvo()
 	restaurarPulsoMiraKillAura()
 	garantirNomesEVidaOutrosJogadores(agora)
+	if invisivelAtivo then
+		atualizarInvisivelSubsolo(0, agora)
+	end
 
 	if hudLosangoVisivel and hudStatsVisivel and statsLabelUI then
 		acumuladorFps += dt
