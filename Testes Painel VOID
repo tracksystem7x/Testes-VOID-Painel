@@ -175,7 +175,6 @@ local ultimoScanAlvosTick = 0
 local alvosElegiveisCache = {}
 local janelaRegistroHitAte = 0
 local ultimoSyncCombateTick = 0
-local ultimoVisibilidadeOutrosTick = 0
 
 local hitboxAtivo = HITBOX_PADRAO_ATIVO
 local hitboxVisivel = HITBOX_VISIVEL_PADRAO
@@ -252,44 +251,6 @@ local function setKillAuraEstado(novoEstado)
 		yawAplicadoNoPulso = nil
 	end
 	atualizarKillAuraUI(killAuraAtivo)
-end
-
--- ==========================================
--- GARANTIR NOMES E VIDA DOS OUTROS JOGADORES VISIVEIS
--- ==========================================
-local function garantirNomesEVidaOutrosJogadores(agora)
-	if agora and (agora - ultimoVisibilidadeOutrosTick) < 0.6 then
-		return
-	end
-	ultimoVisibilidadeOutrosTick = agora or os.clock()
-
-	for _, plr in ipairs(Players:GetPlayers()) do
-		if plr ~= LocalPlayer then
-			local char = plr.Character
-			if char then
-				local hum = char:FindFirstChildOfClass("Humanoid")
-				if hum then
-					pcall(function()
-						if hum.NameDisplayDistance == Enum.HumanoidDisplayDistanceType.None then
-							hum.NameDisplayDistance = Enum.HumanoidDisplayDistanceType.Standard
-						end
-						if hum.HealthDisplayDistance == Enum.HumanoidDisplayDistanceType.None then
-							hum.HealthDisplayDistance = Enum.HumanoidDisplayDistanceType.DisplayWhenDamaged
-						end
-					end)
-				end
-				for _, desc in ipairs(char:GetChildren()) do
-					if desc:IsA("BillboardGui") and desc.Name ~= "AMG_Focus_Indicator" then
-						pcall(function()
-							if not desc.Enabled then
-								desc.Enabled = true
-							end
-						end)
-					end
-				end
-			end
-		end
-	end
 end
 
 -- ==========================================
@@ -1142,11 +1103,6 @@ local function travarPosicaoInvisivelCadeado(char, root, hum)
 	end)
 end
 
-local function fixarRootAbaixoChao(root, hum)
-	local char = root and root.Parent
-	travarPosicaoInvisivelCadeado(char, root, hum)
-end
-
 local function atualizarInvisivelSubsolo(dt, agora)
 	local char = LocalPlayer.Character
 	local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -1232,7 +1188,6 @@ local function setInvisivelEstado(novoEstado)
 		aplicarFioTotalInvisivel(char, hum, true, true)
 		atualizarInvisivelSubsolo(0.016, os.clock())
 	end
-	garantirNomesEVidaOutrosJogadores(0)
 end
 
 -- ==========================================
@@ -3135,7 +3090,6 @@ RunService.RenderStepped:Connect(function(dt)
 	end
 	aplicarFocoNoAlvo()
 	restaurarPulsoMiraKillAura()
-	garantirNomesEVidaOutrosJogadores(agora)
 	if invisivelAtivo then
 		atualizarInvisivelSubsolo(0, agora)
 	end
@@ -3198,4 +3152,4 @@ Players.PlayerRemoving:Connect(function(plr)
 	limparMarcador(plr)
 end)
 
-print("[The VOID Painel] Cadeado ativo em -4.1 studs com Kill Aura e AutoClick!")
+print("[The VOID Painel] Nomes e barras de vida dos outros jogadores preservados!")
