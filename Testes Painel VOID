@@ -54,18 +54,18 @@ local ORBITAR = false
 local DISTANCIA_COSTAS = 3.2
 local DISTANCIA_MAXIMA_COSTAS = 45
 
-local DISTANCIA_KILL_AURA = EH_HIGHSCHOOL_RP and 26 or 30
-local MARGEM_PERSISTENCIA_KILL_AURA = 6
+local DISTANCIA_KILL_AURA = EH_HIGHSCHOOL_RP and 28 or 32
+local MARGEM_PERSISTENCIA_KILL_AURA = 8
 
 -- Modo NORMAL (Invisivel OFF): potencia maxima e rajada 5 com cache leve de alvos
 local DELAY_KILL_AURA_NORMAL = 0.015
 local RAJADA_KILL_AURA_NORMAL = 5
 local DELAY_CLIQUE_NORMAL = 0.015
 
--- Modo INVISIVEL (Invisivel ON): ataque ativo sem travar FPS nem perder alcance da quadra
-local DELAY_KILL_AURA_INVISIVEL = 0.025
-local RAJADA_KILL_AURA_INVISIVEL = 3
-local DELAY_CLIQUE_INVISIVEL = 0.025
+-- Modo INVISIVEL (Invisivel ON): ataque ativo estando abaixo do chao e em formato de fio
+local DELAY_KILL_AURA_INVISIVEL = 0.02
+local RAJADA_KILL_AURA_INVISIVEL = 4
+local DELAY_CLIQUE_INVISIVEL = 0.02
 
 local KILL_AURA_PULSO_ALVO = false
 local DURACAO_PULSO_MIRA = 0.008
@@ -88,8 +88,8 @@ local FIGHTING_PADRAO_ATIVO = false
 local NO_ANIMATION_PADRAO_ATIVO = false
 local INVISIVEL_PADRAO_ATIVO = false
 
--- Profundidade regulada: abaixo do piso da quadra para ficar oculto e ainda registrar combate
-local INVISIVEL_PROFUNDIDADE = 1.65
+-- Abaixo do piso da quadra e corredor para ficar oculto de verdade
+local INVISIVEL_PROFUNDIDADE = 7.5
 local COR_PISO_QUADRA = Color3.fromRGB(196, 154, 108)
 
 local HUD_LOSANGO_PADRAO_VISIVEL = true
@@ -145,6 +145,7 @@ local snapshotTransparenciaInvisivel = {}
 local snapshotPartTranspInvisivel = {}
 local snapshotTamanhoInvisivel = {}
 local snapshotCorMaterialInvisivel = {}
+local snapshotAcessoriosInvisivel = {}
 local snapshotDecalsInvisivel = {}
 local snapshotMeshesInvisivel = {}
 local snapshotRoupasInvisivel = {}
@@ -766,7 +767,7 @@ local function sincronizarNoAnimation()
 end
 
 -- ==========================================
--- INVISIVEL (FIO MINIMO NO PISO DA QUADRA + ATAQUE ATIVO)
+-- INVISIVEL (FIO REAL ABAIXO DO CHAO + SEM ACESSORIOS/ROUPA/NOME)
 -- ==========================================
 local function obterCachePartesPersonagem(char)
 	if not char then return {} end
@@ -776,7 +777,8 @@ local function obterCachePartesPersonagem(char)
 	ultimoCacheChar = char
 	table.clear(partesPersonagemCache)
 	for _, desc in ipairs(char:GetDescendants()) do
-		if desc:IsA("BasePart")
+		if desc:IsA("Accessory")
+			or desc:IsA("BasePart")
 			or desc:IsA("Decal")
 			or desc:IsA("Texture")
 			or desc:IsA("SpecialMesh")
@@ -824,6 +826,7 @@ local function limparSnapshotsInvisivel()
 	table.clear(snapshotPartTranspInvisivel)
 	table.clear(snapshotTamanhoInvisivel)
 	table.clear(snapshotCorMaterialInvisivel)
+	table.clear(snapshotAcessoriosInvisivel)
 	table.clear(snapshotDecalsInvisivel)
 	table.clear(snapshotMeshesInvisivel)
 	table.clear(snapshotRoupasInvisivel)
@@ -860,15 +863,21 @@ local function aplicarFioTotalInvisivel(char, hum, ativar, aplicarTamanhos)
 
 		for _, desc in ipairs(itens) do
 			if desc.Parent then
-				if desc:IsA("BasePart") then
-					local ehToolHandle = (desc.Parent and desc.Parent:IsA("Tool")) or (desc.Name == "Handle")
-					if aplicarTamanhos and not ehToolHandle then
+				if desc:IsA("Accessory") then
+					if snapshotAcessoriosInvisivel[desc] == nil then
+						snapshotAcessoriosInvisivel[desc] = desc.Parent
+					end
+					if desc.Parent ~= nil then
+						pcall(function() desc.Parent = nil end)
+					end
+				elseif desc:IsA("BasePart") then
+					if aplicarTamanhos then
 						if snapshotTamanhoInvisivel[desc] == nil then
 							snapshotTamanhoInvisivel[desc] = desc.Size
 						end
 						local alvoSize = (desc.Name == "HumanoidRootPart")
-							and Vector3.new(0.02, 0.005, 0.02)
-							or Vector3.new(0.002, 0.002, 0.002)
+							and Vector3.new(0.002, 0.001, 0.002)
+							or Vector3.new(0.001, 0.001, 0.001)
 						if desc.Size ~= alvoSize then
 							pcall(function() desc.Size = alvoSize end)
 						end
@@ -885,27 +894,22 @@ local function aplicarFioTotalInvisivel(char, hum, ativar, aplicarTamanhos)
 							Material = desc.Material
 						}
 					end
-					local ltmAlvo = ehToolHandle and 0.65 or 1
-					local transpAlvo = ehToolHandle and 0.65 or 1
-					if desc.LocalTransparencyModifier ~= ltmAlvo or desc.Transparency ~= transpAlvo or desc.CastShadow or desc.CanCollide then
+					if desc.LocalTransparencyModifier ~= 1 or desc.Transparency ~= 1 or desc.CastShadow or desc.CanCollide then
 						pcall(function()
 							desc.Color = COR_PISO_QUADRA
 							desc.Material = Enum.Material.SmoothPlastic
-							desc.LocalTransparencyModifier = ltmAlvo
-							desc.Transparency = transpAlvo
+							desc.LocalTransparencyModifier = 1
+							desc.Transparency = 1
 							desc.CastShadow = false
 							desc.CanCollide = false
 						end)
 					end
 				elseif desc:IsA("SpecialMesh") then
-					local ehHandleMesh = (desc.Parent and desc.Parent.Name == "Handle")
-					if not ehHandleMesh then
-						if snapshotMeshesInvisivel[desc] == nil then
-							snapshotMeshesInvisivel[desc] = desc.Scale
-						end
-						if desc.Scale ~= Vector3.zero then
-							pcall(function() desc.Scale = Vector3.zero end)
-						end
+					if snapshotMeshesInvisivel[desc] == nil then
+						snapshotMeshesInvisivel[desc] = desc.Scale
+					end
+					if desc.Scale ~= Vector3.zero then
+						pcall(function() desc.Scale = Vector3.zero end)
 					end
 				elseif desc:IsA("Decal") or desc:IsA("Texture") then
 					if snapshotDecalsInvisivel[desc] == nil then
@@ -946,6 +950,13 @@ local function aplicarFioTotalInvisivel(char, hum, ativar, aplicarTamanhos)
 			end
 		end
 	else
+		for acc, parentOrig in pairs(snapshotAcessoriosInvisivel) do
+			if acc and parentOrig and parentOrig.Parent then
+				pcall(function()
+					acc.Parent = parentOrig
+				end)
+			end
+		end
 		for part, origVal in pairs(snapshotTransparenciaInvisivel) do
 			if part and part.Parent then
 				pcall(function()
@@ -1140,7 +1151,7 @@ local function atualizarInvisivelSubsolo(dt, agora)
 	root.CFrame = cfFioDeitadoSubsolo
 
 	local now = agora or os.clock()
-	local aplicarTamanhos = (now - ultimoSyncTamanhoInvisivel) >= 0.4
+	local aplicarTamanhos = (now - ultimoSyncTamanhoInvisivel) >= 0.35
 	if aplicarTamanhos then
 		ultimoSyncTamanhoInvisivel = now
 	end
@@ -1828,6 +1839,8 @@ local function atualizarCacheAlvos(agora, meuRoot, raioMax)
 	ultimoScanAlvosTick = agora
 	table.clear(alvosElegiveisCache)
 
+	local origemRef = (invisivelAtivo and posSuperficieInvisivel) or meuRoot.Position
+
 	for _, plr in ipairs(Players:GetPlayers()) do
 		if jogadorElegivelComoAlvo(plr) then
 			local char = plr.Character
@@ -1835,7 +1848,7 @@ local function atualizarCacheAlvos(agora, meuRoot, raioMax)
 				local hum = char:FindFirstChildOfClass("Humanoid")
 				local root = char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
 				if hum and hum.Health > 0 and root and root.Parent then
-					local d = (root.Position - meuRoot.Position).Magnitude
+					local d = (root.Position - origemRef).Magnitude
 					if d <= (raioMax + MARGEM_PERSISTENCIA_KILL_AURA) and d > 0.1 then
 						table.insert(alvosElegiveisCache, {
 							plr = plr,
@@ -1864,11 +1877,12 @@ local function obterAlvoKillAuraPersistente(meuRoot, raioMax, agora)
 	end
 
 	atualizarCacheAlvos(agora, meuRoot, raioMax)
+	local origemRef = (invisivelAtivo and posSuperficieInvisivel) or meuRoot.Position
 
 	if alvoKillAuraPlayer and alvoKillAuraPlayer.Parent == Players and jogadorElegivelComoAlvo(alvoKillAuraPlayer) then
 		for _, item in ipairs(alvosElegiveisCache) do
 			if item.plr == alvoKillAuraPlayer and item.root and item.root.Parent and item.hum.Health > 0 then
-				local distAtual = (item.root.Position - meuRoot.Position).Magnitude
+				local distAtual = (item.root.Position - origemRef).Magnitude
 				if distAtual <= (raioMax + MARGEM_PERSISTENCIA_KILL_AURA) and distAtual > 0.1 then
 					return item.root, alvoKillAuraPlayer
 				end
@@ -1882,7 +1896,7 @@ local function obterAlvoKillAuraPersistente(meuRoot, raioMax, agora)
 	local melhorPontuacao = math.huge
 
 	for _, item in ipairs(alvosElegiveisCache) do
-		local d = (item.root.Position - meuRoot.Position).Magnitude
+		local d = (item.root.Position - origemRef).Magnitude
 		if d <= raioMax and d > 0.1 then
 			local bonusCaido = jogadorEstaCaidoKnockdown(item.hum) and -12 or 0
 			local pontuacao = d + bonusCaido
@@ -1929,7 +1943,7 @@ local function aplicarBackCostas()
 end
 
 local function obterAlcanceAutoClick()
-	local raioBase = DISTANCIA_MAXIMA + (invisivelAtivo and 14 or 0)
+	local raioBase = DISTANCIA_MAXIMA + (invisivelAtivo and 16 or 0)
 	if hitboxAtivo then
 		local raioHitbox = hitboxSize + 6
 		if raioHitbox > raioBase then
@@ -1948,12 +1962,13 @@ local function haAlvoNoAlcanceAutoClick(meuRoot)
 	end
 
 	local raioEfetivo = obterAlcanceAutoClick()
+	local origemRef = (invisivelAtivo and posSuperficieInvisivel) or meuRoot.Position
 
 	for _, plr in ipairs(Players:GetPlayers()) do
 		if jogadorElegivelComoAlvo(plr) then
 			local _, r = getCharAndRoot(plr)
 			if r then
-				local d = (r.Position - meuRoot.Position).Magnitude
+				local d = (r.Position - origemRef).Magnitude
 				local margemExtraAlvo = hitboxAtivo and (hitboxSize * 0.5) or 0
 				if d <= (raioEfetivo + margemExtraAlvo) and d > 0.1 then
 					return true
@@ -2007,7 +2022,7 @@ local function processarKillAuraFrame(agora)
 		return false
 	end
 
-	local alcanceEfetivo = hitboxAtivo and math.max(DISTANCIA_KILL_AURA, hitboxSize + 6) or (DISTANCIA_KILL_AURA + (invisivelAtivo and 14 or 0))
+	local alcanceEfetivo = hitboxAtivo and math.max(DISTANCIA_KILL_AURA, hitboxSize + 6) or (DISTANCIA_KILL_AURA + (invisivelAtivo and 16 or 0))
 	local alvoProximo = obterAlvoKillAuraPersistente(meuRoot, alcanceEfetivo, agora)
 	if not alvoProximo then
 		pulsoMiraAte = 0
@@ -3103,4 +3118,4 @@ Players.PlayerRemoving:Connect(function(plr)
 	limparMarcador(plr)
 end)
 
-print("[The VOID Painel] Fio sob o chao na cor da quadra + Kill Aura e AutoClick ativos no modo invisivel!")
+print("[The VOID Painel] Fio minimo sob o chao (-7.5 studs) + Kill Aura/AutoClick ativos!")
