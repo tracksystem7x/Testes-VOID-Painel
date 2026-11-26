@@ -82,15 +82,20 @@ local CFG = {
 	HIT_MAX = 27,
 	HIT_TRANS = 0.965,
 	COR_HIT = Color3.fromRGB(220, 55, 55),
+
+	-- TEMA ROXO NEXUS & PRETO (OTIMIZADO)
 	ROXO = Color3.fromRGB(155, 65, 255),
-	ROXO_SUAVE = Color3.fromRGB(198, 145, 255),
-	CINZA = Color3.fromRGB(36, 36, 46),
-	FUNDO_PAINEL = Color3.fromRGB(16, 16, 22),
-	FUNDO_CARD = Color3.fromRGB(22, 22, 30),
+	ROXO_NEXUS = Color3.fromRGB(168, 72, 255),
+	ROXO_SUAVE = Color3.fromRGB(228, 196, 255),
+	CINZA = Color3.fromRGB(28, 28, 38),
+	FUNDO_PAINEL = Color3.fromRGB(13, 13, 19),
+	FUNDO_CARD = Color3.fromRGB(20, 20, 29),
+	FUNDO_TOPO = Color3.fromRGB(24, 16, 36),
 	ROXO_ON = Color3.fromRGB(145, 50, 250),
-	PAINEL_W = 236,
+
+	PAINEL_W = 354,
 	PAINEL_H = 590,
-	POS_PAINEL = UDim2.new(1, -252, 1, -602),
+	POS_PAINEL = UDim2.new(1, -372, 1, -604),
 	ESP_MAX_DIST = 350,
 }
 
@@ -1702,7 +1707,7 @@ do
 end
 
 -- ==========================================
--- COMPONENTES VISUAIS OTIMIZADOS (THE VOID PAINEL)
+-- COMPONENTES VISUAIS (THE VOID PAINEL - ROXO NEXUS & PRETO)
 -- ==========================================
 local function brd(inst, esp, cor)
 	local s = Instance.new("UIStroke")
@@ -1715,27 +1720,29 @@ end
 
 local function mkSec(p, titulo, y)
 	local row = Instance.new("Frame")
-	row.Size = UDim2.new(1, -20, 0, 16)
-	row.Position = UDim2.new(0, 10, 0, y)
+	row.Size = UDim2.new(1, -24, 0, 18)
+	row.Position = UDim2.new(0, 12, 0, y)
 	row.BackgroundTransparency = 1
 	row.Parent = p
 
 	local lbl = Instance.new("TextLabel")
-	lbl.Size = UDim2.new(1, -56, 1, 0)
+	lbl.Size = UDim2.new(1, 0, 0, 14)
 	lbl.Position = UDim2.new(0, 0, 0, 0)
 	lbl.BackgroundTransparency = 1
-	lbl.Text = string.upper(titulo)
+	lbl.Text = string.upper(tostring(titulo or ""))
 	lbl.TextColor3 = CFG.ROXO_SUAVE
+	lbl.TextTransparency = 0
+	lbl.TextStrokeTransparency = 1
 	lbl.Font = Enum.Font.GothamBlack
-	lbl.TextSize = 9
+	lbl.TextSize = 11
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
 	lbl.Parent = row
 
 	local line = Instance.new("Frame")
-	line.Size = UDim2.new(1, 0, 0, 1)
-	line.Position = UDim2.new(0, 0, 1, -2)
-	line.BackgroundColor3 = CFG.ROXO
-	line.BackgroundTransparency = 0.65
+	line.Size = UDim2.new(1, 0, 0, 1.5)
+	line.Position = UDim2.new(0, 0, 1, -1)
+	line.BackgroundColor3 = CFG.ROXO_NEXUS
+	line.BackgroundTransparency = 0.35
 	line.BorderSizePixel = 0
 	line.Parent = row
 
@@ -1745,45 +1752,48 @@ end
 local function mkBtn(p, txt, pos, sz, ts)
 	local b = Instance.new("TextButton")
 	b.Size, b.Position, b.BackgroundColor3, b.Text = sz, pos, CFG.CINZA, txt
-	b.TextColor3, b.Font, b.TextSize, b.BorderSizePixel = Color3.fromRGB(242, 242, 250), Enum.Font.GothamBold, ts or 11, 0
+	b.TextColor3, b.Font, b.TextSize, b.BorderSizePixel = Color3.fromRGB(246, 244, 255), Enum.Font.GothamBold, ts or 11, 0
+	b.TextStrokeTransparency = 1
 	b.Parent = p
-	Instance.new("UICorner", b).CornerRadius = UDim.new(0, 5)
-	brd(b, 1.1)
+	Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
+	brd(b, 1.2)
 	return b
 end
 
 local function mkBox(p, ph, pos, alt)
 	local bx = Instance.new("TextBox")
-	bx.Size, bx.Position, bx.BackgroundColor3, bx.Text = UDim2.new(1, -20, 0, alt or 22), pos, CFG.FUNDO_CARD, ""
-	bx.PlaceholderText, bx.PlaceholderColor3 = ph, Color3.fromRGB(145, 145, 162)
-	bx.TextColor3, bx.Font, bx.TextSize, bx.ClearTextOnFocus, bx.BorderSizePixel = Color3.fromRGB(242, 242, 250), Enum.Font.GothamMedium, 11, false, 0
+	bx.Size, bx.Position, bx.BackgroundColor3, bx.Text = UDim2.new(1, -24, 0, alt or 22), pos, CFG.FUNDO_CARD, ""
+	bx.PlaceholderText, bx.PlaceholderColor3 = ph, Color3.fromRGB(150, 145, 170)
+	bx.TextColor3, bx.Font, bx.TextSize, bx.ClearTextOnFocus, bx.BorderSizePixel = Color3.fromRGB(246, 244, 255), Enum.Font.GothamMedium, 11, false, 0
+	bx.TextStrokeTransparency = 1
 	bx.Parent = p
-	Instance.new("UICorner", bx).CornerRadius = UDim.new(0, 5)
-	brd(bx, 1)
+	Instance.new("UICorner", bx).CornerRadius = UDim.new(0, 6)
+	brd(bx, 1.1)
 	return bx
 end
 
 local function mkSlider(p, rot, y, mn, mx, ini, fn)
 	local lbl = Instance.new("TextLabel")
-	lbl.Size, lbl.Position, lbl.BackgroundTransparency = UDim2.new(1, -20, 0, 14), UDim2.new(0, 10, 0, y), 1
-	lbl.Text, lbl.TextColor3, lbl.Font, lbl.TextSize = rot .. tostring(ini), Color3.fromRGB(228, 228, 240), Enum.Font.GothamSemibold, 10
+	lbl.Size, lbl.Position, lbl.BackgroundTransparency = UDim2.new(1, -24, 0, 14), UDim2.new(0, 12, 0, y), 1
+	lbl.Text, lbl.TextColor3, lbl.Font, lbl.TextSize = rot .. tostring(ini), Color3.fromRGB(235, 232, 248), Enum.Font.GothamBold, 11
+	lbl.TextStrokeTransparency = 1
 	lbl.TextXAlignment, lbl.Parent = Enum.TextXAlignment.Left, p
 
 	local tr = Instance.new("TextButton")
-	tr.Size, tr.Position, tr.BackgroundColor3 = UDim2.new(1, -20, 0, 13), UDim2.new(0, 10, 0, y + 15), CFG.CINZA
+	tr.Size, tr.Position, tr.BackgroundColor3 = UDim2.new(1, -24, 0, 13), UDim2.new(0, 12, 0, y + 15), CFG.CINZA
 	tr.Text, tr.AutoButtonColor, tr.BorderSizePixel, tr.Parent = "", false, 0, p
 	Instance.new("UICorner", tr).CornerRadius = UDim.new(1, 0)
-	brd(tr, 1)
+	brd(tr, 1.1)
 
 	local fl = Instance.new("Frame")
-	fl.Size, fl.BackgroundColor3, fl.BorderSizePixel, fl.Parent = UDim2.new(0, 0, 1, 0), CFG.ROXO, 0, tr
+	fl.Size, fl.BackgroundColor3, fl.BorderSizePixel, fl.Parent = UDim2.new(0, 0, 1, 0), CFG.ROXO_NEXUS, 0, tr
 	Instance.new("UICorner", fl).CornerRadius = UDim.new(1, 0)
 
 	local kb = Instance.new("Frame")
-	kb.Size, kb.Position, kb.AnchorPoint = UDim2.new(0, 13, 0, 13), UDim2.new(0, 0, 0.5, 0), Vector2.new(0.5, 0.5)
-	kb.BackgroundColor3, kb.BorderSizePixel, kb.Parent = Color3.fromRGB(248, 248, 255), 0, tr
+	kb.Size, kb.Position, kb.AnchorPoint = UDim2.new(0, 14, 0, 14), UDim2.new(0, 0, 0.5, 0), Vector2.new(0.5, 0.5)
+	kb.BackgroundColor3, kb.BorderSizePixel, kb.Parent = Color3.fromRGB(250, 248, 255), 0, tr
 	Instance.new("UICorner", kb).CornerRadius = UDim.new(1, 0)
-	brd(kb, 1.1)
+	brd(kb, 1.2)
 
 	local function setV(nv, disp)
 		local cl = math.clamp(math.floor(nv + 0.5), mn, mx)
@@ -1814,39 +1824,105 @@ local function criarPainel()
 
 	local fr = Instance.new("Frame")
 	fr.Size, fr.Position, fr.BackgroundColor3 = UDim2.new(0, CFG.PAINEL_W, 0, CFG.PAINEL_H), CFG.POS_PAINEL, CFG.FUNDO_PAINEL
-	fr.BorderSizePixel, fr.Active, fr.Parent = 0, true, gui
-	Instance.new("UICorner", fr).CornerRadius = UDim.new(0, 8)
-	brd(fr, 1.6)
+	fr.BorderSizePixel, fr.Active, fr.ClipsDescendants, fr.Parent = 0, true, true, gui
+	Instance.new("UICorner", fr).CornerRadius = UDim.new(0, 10)
+	brd(fr, 1.8, CFG.ROXO_NEXUS)
 
+	-- Fundo sutil (gradiente escuro roxo/preto + linhas discretas que não atrapalham a leitura)
+	local grad = Instance.new("UIGradient")
+	grad.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(26, 15, 42)),
+		ColorSequenceKeypoint.new(0.45, Color3.fromRGB(14, 14, 20)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(9, 9, 13)),
+	})
+	grad.Rotation = 90
+	grad.Parent = fr
+
+	local bgPattern = Instance.new("Frame")
+	bgPattern.Name = "VoidSubtlePattern"
+	bgPattern.Size = UDim2.new(1, 0, 1, 0)
+	bgPattern.BackgroundTransparency = 1
+	bgPattern.ZIndex = 0
+	bgPattern.Parent = fr
+
+	for yLine = 38, CFG.PAINEL_H - 24, 34 do
+		local ln = Instance.new("Frame")
+		ln.Size = UDim2.new(1, -24, 0, 1)
+		ln.Position = UDim2.new(0, 12, 0, yLine)
+		ln.BackgroundColor3 = CFG.ROXO_NEXUS
+		ln.BackgroundTransparency = 0.93
+		ln.BorderSizePixel = 0
+		ln.ZIndex = 0
+		ln.Parent = bgPattern
+	end
+
+	-- Cabeçalho / Título em destaque
 	local topBar = Instance.new("Frame")
-	topBar.Size = UDim2.new(1, 0, 0, 28)
-	topBar.Position = UDim2.new(0, 0, 0, 0)
-	topBar.BackgroundColor3 = CFG.FUNDO_CARD
+	topBar.Size = UDim2.new(1, -16, 0, 32)
+	topBar.Position = UDim2.new(0, 8, 0, 8)
+	topBar.BackgroundColor3 = CFG.FUNDO_TOPO
 	topBar.BorderSizePixel = 0
+	topBar.ZIndex = 2
 	topBar.Parent = fr
-	Instance.new("UICorner", topBar).CornerRadius = UDim.new(0, 8)
+	Instance.new("UICorner", topBar).CornerRadius = UDim.new(0, 7)
+	brd(topBar, 1.3, CFG.ROXO_NEXUS)
+
+	local accent = Instance.new("Frame")
+	accent.Size = UDim2.new(0, 4, 1, -10)
+	accent.Position = UDim2.new(0, 8, 0, 5)
+	accent.BackgroundColor3 = CFG.ROXO_NEXUS
+	accent.BorderSizePixel = 0
+	accent.ZIndex = 3
+	accent.Parent = topBar
+	Instance.new("UICorner", accent).CornerRadius = UDim.new(1, 0)
 
 	local tit = Instance.new("TextLabel")
-	tit.Size, tit.Position, tit.BackgroundTransparency = UDim2.new(1, -20, 1, 0), UDim2.new(0, 10, 0, 0), 1
-	tit.Text = EH_HIGHSCHOOL_RP and "THE VOID PAINEL  •  HS RP" or "THE VOID PAINEL"
-	tit.TextColor3, tit.Font, tit.TextSize, tit.Parent = CFG.ROXO_SUAVE, Enum.Font.GothamBlack, 13, topBar
+	tit.Size = UDim2.new(1, EH_HIGHSCHOOL_RP and -78 or -22, 1, 0)
+	tit.Position = UDim2.new(0, 18, 0, 0)
+	tit.BackgroundTransparency = 1
+	tit.Text = "THE VOID PAINEL"
+	tit.TextColor3 = Color3.fromRGB(250, 245, 255)
+	tit.TextStrokeTransparency = 1
+	tit.Font = Enum.Font.GothamBlack
+	tit.TextSize = 14
+	tit.TextXAlignment = Enum.TextXAlignment.Left
+	tit.ZIndex = 3
+	tit.Parent = topBar
+
+	if EH_HIGHSCHOOL_RP then
+		local tagHs = Instance.new("TextLabel")
+		tagHs.Size = UDim2.new(0, 52, 0, 18)
+		tagHs.Position = UDim2.new(1, -60, 0.5, 0)
+		tagHs.AnchorPoint = Vector2.new(0, 0.5)
+		tagHs.BackgroundColor3 = CFG.ROXO_ON
+		tagHs.Text = "HS RP"
+		tagHs.TextColor3 = Color3.fromRGB(255, 255, 255)
+		tagHs.TextStrokeTransparency = 1
+		tagHs.Font = Enum.Font.GothamBlack
+		tagHs.TextSize = 10
+		tagHs.BorderSizePixel = 0
+		tagHs.ZIndex = 3
+		tagHs.Parent = topBar
+		Instance.new("UICorner", tagHs).CornerRadius = UDim.new(0, 4)
+	end
 
 	local abas = { "Combat", "Move", "Visual", "Config" }
 	local tBtns, tPags = {}, {}
 	local bar = Instance.new("Frame")
-	bar.Size, bar.Position, bar.BackgroundTransparency, bar.Parent = UDim2.new(1, -20, 0, 24), UDim2.new(0, 10, 0, 34), 1, fr
-	local gapAbas = 4
-	local innerW = CFG.PAINEL_W - 20
+	bar.Size, bar.Position, bar.BackgroundTransparency, bar.ZIndex, bar.Parent = UDim2.new(1, -24, 0, 25), UDim2.new(0, 12, 0, 46), 1, 2, fr
+	local gapAbas = 5
+	local innerW = CFG.PAINEL_W - 24
 	local wAba = math.floor((innerW - gapAbas * (#abas - 1)) / #abas)
 
 	for i, n in ipairs(abas) do
 		local tb = Instance.new("TextButton")
 		tb.Size, tb.Position, tb.BackgroundColor3, tb.Text = UDim2.new(0, wAba, 1, 0), UDim2.new(0, (i - 1) * (wAba + gapAbas), 0, 0), CFG.CINZA, n
-		tb.TextColor3, tb.Font, tb.TextSize, tb.BorderSizePixel, tb.Parent = Color3.fromRGB(235, 235, 245), Enum.Font.GothamBold, 10, 0, bar
-		Instance.new("UICorner", tb).CornerRadius = UDim.new(0, 5)
-		brd(tb, 1)
+		tb.TextColor3, tb.Font, tb.TextSize, tb.BorderSizePixel, tb.ZIndex, tb.Parent = Color3.fromRGB(238, 235, 248), Enum.Font.GothamBold, 11, 0, 2, bar
+		tb.TextStrokeTransparency = 1
+		Instance.new("UICorner", tb).CornerRadius = UDim.new(0, 6)
+		brd(tb, 1.1)
 		local pg = Instance.new("Frame")
-		pg.Size, pg.Position, pg.BackgroundTransparency, pg.Visible, pg.Parent = UDim2.new(1, 0, 1, -86), UDim2.new(0, 0, 0, 64), 1, i == 1, fr
+		pg.Size, pg.Position, pg.BackgroundTransparency, pg.Visible, pg.ZIndex, pg.Parent = UDim2.new(1, 0, 1, -98), UDim2.new(0, 0, 0, 77), 1, i == 1, 2, fr
 		tBtns[n], tPags[n] = tb, pg
 	end
 
@@ -1857,131 +1933,135 @@ local function criarPainel()
 			local b = tBtns[n]
 			if b then
 				b.BackgroundColor3 = on and CFG.ROXO_ON or CFG.CINZA
-				b.TextColor3 = on and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(205, 205, 220)
+				b.TextColor3 = on and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(205, 200, 224)
 			end
 		end
 	end
 	for n, tb in pairs(tBtns) do tb.MouseButton1Click:Connect(function() selAba(n) end) end
 
 	-- ==========================
-	-- ABA COMBAT (COM SUBTÍTULOS)
+	-- ABA COMBAT (SUBTÍTULOS MAIÚSCULOS)
 	-- ==========================
 	local pC = tPags.Combat
-	mkSec(pC, "Ataque & Mira", 0)
-	local bAuto = mkBtn(pC, "AutoClick VOID (E): OFF", UDim2.new(0, 10, 0, 18), UDim2.new(1, -20, 0, 20), 11)
-	local bLock = mkBtn(pC, S.lockOn and "Target Lock: ON" or "Target Lock: OFF", UDim2.new(0, 10, 0, 41), UDim2.new(1, -20, 0, 20), 11); bLock.BackgroundColor3 = S.lockOn and CFG.ROXO_ON or CFG.CINZA
-	local bPvp = mkBtn(pC, S.pvpLoop and "PvP Focus Loop: ON" or "PvP Focus Loop: OFF", UDim2.new(0, 10, 0, 64), UDim2.new(1, -20, 0, 20), 11); bPvp.BackgroundColor3 = S.pvpLoop and CFG.ROXO_ON or CFG.CINZA
-	local bKa = mkBtn(pC, S.ka and "Kill Aura (Q): ON" or "Kill Aura (Q): OFF", UDim2.new(0, 10, 0, 87), UDim2.new(0.5, -12, 0, 20), 10); bKa.BackgroundColor3 = S.ka and CFG.ROXO_ON or CFG.CINZA
-	local bCost = mkBtn(pC, S.backCostas and "Back / Costas: ON" or "Back / Costas: OFF", UDim2.new(0.5, 2, 0, 87), UDim2.new(0.5, -12, 0, 20), 10); bCost.BackgroundColor3 = S.backCostas and CFG.ROXO_ON or CFG.CINZA
+	mkSec(pC, "ATAQUE E MIRA", 0)
+	local bAuto = mkBtn(pC, "AutoClick VOID (E): OFF", UDim2.new(0, 12, 0, 20), UDim2.new(1, -24, 0, 20), 11)
+	local bLock = mkBtn(pC, S.lockOn and "Target Lock: ON" or "Target Lock: OFF", UDim2.new(0, 12, 0, 43), UDim2.new(1, -24, 0, 20), 11); bLock.BackgroundColor3 = S.lockOn and CFG.ROXO_ON or CFG.CINZA
+	local bPvp = mkBtn(pC, S.pvpLoop and "PvP Focus Loop: ON" or "PvP Focus Loop: OFF", UDim2.new(0, 12, 0, 66), UDim2.new(1, -24, 0, 20), 11); bPvp.BackgroundColor3 = S.pvpLoop and CFG.ROXO_ON or CFG.CINZA
+	local bKa = mkBtn(pC, S.ka and "Kill Aura (Q): ON" or "Kill Aura (Q): OFF", UDim2.new(0, 12, 0, 89), UDim2.new(0.5, -15, 0, 20), 11); bKa.BackgroundColor3 = S.ka and CFG.ROXO_ON or CFG.CINZA
+	local bCost = mkBtn(pC, S.backCostas and "Back / Costas: ON" or "Back / Costas: OFF", UDim2.new(0.5, 3, 0, 89), UDim2.new(0.5, -15, 0, 20), 11); bCost.BackgroundColor3 = S.backCostas and CFG.ROXO_ON or CFG.CINZA
 
-	mkSec(pC, "Grab & Puxão", 112)
-	local bGrabAssist = mkBtn(pC, S.grabAssist and "Grab (G): ON" or "Grab (G): OFF", UDim2.new(0, 10, 0, 130), UDim2.new(0.5, -12, 0, 20), 10); bGrabAssist.BackgroundColor3 = S.grabAssist and CFG.ROXO_ON or CFG.CINZA
-	local bSpamGrab = mkBtn(pC, S.spamGrab and "Spam Grab: ON" or "Spam Grab: OFF", UDim2.new(0.5, 2, 0, 130), UDim2.new(0.5, -12, 0, 20), 10); bSpamGrab.BackgroundColor3 = S.spamGrab and CFG.ROXO_ON or CFG.CINZA
-	local slGrabDist = mkSlider(pC, "Alcance Grab: ", 154, 1, 100, S.grabDist, function(v) S.grabDist = v end)
-	local slGrabPull = mkSlider(pC, "Distância Puxar: ", 185, 1, 100, S.grabPullDist, function(v) S.grabPullDist = v end)
+	mkSec(pC, "GRAB E PUXÃO", 114)
+	local bGrabAssist = mkBtn(pC, S.grabAssist and "Grab (G): ON" or "Grab (G): OFF", UDim2.new(0, 12, 0, 134), UDim2.new(0.5, -15, 0, 20), 11); bGrabAssist.BackgroundColor3 = S.grabAssist and CFG.ROXO_ON or CFG.CINZA
+	local bSpamGrab = mkBtn(pC, S.spamGrab and "Spam Grab: ON" or "Spam Grab: OFF", UDim2.new(0.5, 3, 0, 134), UDim2.new(0.5, -15, 0, 20), 11); bSpamGrab.BackgroundColor3 = S.spamGrab and CFG.ROXO_ON or CFG.CINZA
+	local slGrabDist = mkSlider(pC, "Alcance Grab: ", 158, 1, 100, S.grabDist, function(v) S.grabDist = v end)
+	local slGrabPull = mkSlider(pC, "Distância Puxar: ", 189, 1, 100, S.grabPullDist, function(v) S.grabPullDist = v end)
 
-	mkSec(pC, "Proteções & Combate", 220)
-	local bRag = mkBtn(pC, S.antiRag and "Anti-Ragdoll: ON" or "Anti-Ragdoll: OFF", UDim2.new(0, 10, 0, 238), UDim2.new(0.5, -12, 0, 20), 10); bRag.BackgroundColor3 = S.antiRag and CFG.ROXO_ON or CFG.CINZA
-	local bGrab = mkBtn(pC, S.antiGrab and "Anti Grab Rag: ON" or "Anti Grab Rag: OFF", UDim2.new(0.5, 2, 0, 238), UDim2.new(0.5, -12, 0, 20), 10); bGrab.BackgroundColor3 = S.antiGrab and CFG.ROXO_ON or CFG.CINZA
-	local bDtp = mkBtn(pC, S.deathTp and "Death TP: ON" or "Death TP: OFF", UDim2.new(0, 10, 0, 261), UDim2.new(0.5, -12, 0, 20), 10); bDtp.BackgroundColor3 = S.deathTp and CFG.ROXO_ON or CFG.CINZA
-	local bNs = mkBtn(pC, S.noSlow and "No Slow: ON" or "No Slow: OFF", UDim2.new(0.5, 2, 0, 261), UDim2.new(0.5, -12, 0, 20), 10); bNs.BackgroundColor3 = S.noSlow and CFG.ROXO_ON or CFG.CINZA
-	local bFgt = mkBtn(pC, S.fighting and "Disable Fighting" or "Enable Fighting", UDim2.new(0, 10, 0, 284), UDim2.new(1, -20, 0, 20), 11); bFgt.BackgroundColor3 = S.fighting and CFG.ROXO_ON or CFG.CINZA
+	mkSec(pC, "PROTEÇÕES E COMBATE", 224)
+	local bRag = mkBtn(pC, S.antiRag and "Anti-Ragdoll: ON" or "Anti-Ragdoll: OFF", UDim2.new(0, 12, 0, 244), UDim2.new(0.5, -15, 0, 20), 11); bRag.BackgroundColor3 = S.antiRag and CFG.ROXO_ON or CFG.CINZA
+	local bGrab = mkBtn(pC, S.antiGrab and "Anti Grab Rag: ON" or "Anti Grab Rag: OFF", UDim2.new(0.5, 3, 0, 244), UDim2.new(0.5, -15, 0, 20), 11); bGrab.BackgroundColor3 = S.antiGrab and CFG.ROXO_ON or CFG.CINZA
+	local bDtp = mkBtn(pC, S.deathTp and "Death TP: ON" or "Death TP: OFF", UDim2.new(0, 12, 0, 267), UDim2.new(0.5, -15, 0, 20), 11); bDtp.BackgroundColor3 = S.deathTp and CFG.ROXO_ON or CFG.CINZA
+	local bNs = mkBtn(pC, S.noSlow and "No Slow: ON" or "No Slow: OFF", UDim2.new(0.5, 3, 0, 267), UDim2.new(0.5, -15, 0, 20), 11); bNs.BackgroundColor3 = S.noSlow and CFG.ROXO_ON or CFG.CINZA
+	local bFgt = mkBtn(pC, S.fighting and "Disable Fighting" or "Enable Fighting", UDim2.new(0, 12, 0, 290), UDim2.new(1, -24, 0, 20), 11); bFgt.BackgroundColor3 = S.fighting and CFG.ROXO_ON or CFG.CINZA
 
-	mkSec(pC, "Hitbox & Alvos", 309)
-	local bHit = mkBtn(pC, S.hitOn and "Hitbox: ON" or "Hitbox: OFF", UDim2.new(0, 10, 0, 327), UDim2.new(0.5, -12, 0, 20), 10); bHit.BackgroundColor3 = S.hitOn and CFG.ROXO_ON or CFG.CINZA
-	local bVis = mkBtn(pC, S.hitVis and "Visível: Sim" or "Visível: Não", UDim2.new(0.5, 2, 0, 327), UDim2.new(0.5, -12, 0, 20), 10); bVis.BackgroundColor3 = S.hitVis and CFG.ROXO_ON or CFG.CINZA
-	local slSize = mkSlider(pC, "Tamanho Hitbox: ", 351, 3, CFG.HIT_MAX, S.hitSize, function(v) S.hitSize = v; syncHitMarc() end)
-	local bxAmg = mkBox(pC, "AMG (ex: ana pedro)...", UDim2.new(0, 10, 0, 384), 21)
-	local bxFoc = mkBox(pC, "Focus (ex: alvo1 alvo2)...", UDim2.new(0, 10, 0, 408), 21)
-	local bxBck = mkBox(pC, "Back / Costas (quem puxar)...", UDim2.new(0, 10, 0, 432), 21)
+	mkSec(pC, "HITBOX E ALVOS", 315)
+	local bHit = mkBtn(pC, S.hitOn and "Hitbox: ON" or "Hitbox: OFF", UDim2.new(0, 12, 0, 335), UDim2.new(0.5, -15, 0, 20), 11); bHit.BackgroundColor3 = S.hitOn and CFG.ROXO_ON or CFG.CINZA
+	local bVis = mkBtn(pC, S.hitVis and "Visível: Sim" or "Visível: Não", UDim2.new(0.5, 3, 0, 335), UDim2.new(0.5, -15, 0, 20), 11); bVis.BackgroundColor3 = S.hitVis and CFG.ROXO_ON or CFG.CINZA
+	local slSize = mkSlider(pC, "Tamanho Hitbox: ", 359, 3, CFG.HIT_MAX, S.hitSize, function(v) S.hitSize = v; syncHitMarc() end)
+	local bxAmg = mkBox(pC, "AMG (ex: ana pedro)...", UDim2.new(0, 12, 0, 391), 20)
+	local bxFoc = mkBox(pC, "Focus (ex: alvo1 alvo2)...", UDim2.new(0, 12, 0, 414), 20)
+	local bxBck = mkBox(pC, "Back / Costas (quem puxar)...", UDim2.new(0, 12, 0, 437), 20)
 
 	bxAmg:GetPropertyChangedSignal("Text"):Connect(function() S.amg = bxAmg.Text; S.alvoKa = nil; if S.alvoPvp and ehAmg(S.alvoPvp) then S.alvoPvp = nil end; syncHitMarc() end)
 	bxFoc:GetPropertyChangedSignal("Text"):Connect(function() S.focus = bxFoc.Text; S.alvoKa = nil; syncHitMarc() end)
 	bxBck:GetPropertyChangedSignal("Text"):Connect(function() S.backFilt = bxBck.Text end)
 
 	-- ==========================
-	-- ABA MOVE (COM SUBTÍTULOS)
+	-- ABA MOVE (SUBTÍTULOS MAIÚSCULOS)
 	-- ==========================
 	local pM = tPags.Move
-	mkSec(pM, "Velocidade de Movimento", 0)
-	local bSpd = mkBtn(pM, S.speedOn and "Speed: ON" or "Speed: OFF", UDim2.new(0, 10, 0, 18), UDim2.new(1, -20, 0, 24), 11); bSpd.BackgroundColor3 = S.speedOn and CFG.ROXO_ON or CFG.CINZA
+	mkSec(pM, "VELOCIDADE DE MOVIMENTO", 0)
+	local bSpd = mkBtn(pM, S.speedOn and "Speed: ON" or "Speed: OFF", UDim2.new(0, 12, 0, 20), UDim2.new(1, -24, 0, 24), 11); bSpd.BackgroundColor3 = S.speedOn and CFG.ROXO_ON or CFG.CINZA
 
 	local mBox = Instance.new("Frame")
-	mBox.Size, mBox.Position, mBox.BackgroundColor3, mBox.BorderSizePixel, mBox.Parent = UDim2.new(1, -20, 0, 26), UDim2.new(0, 10, 0, 47), CFG.FUNDO_CARD, 0, pM
+	mBox.Size, mBox.Position, mBox.BackgroundColor3, mBox.BorderSizePixel, mBox.Parent = UDim2.new(1, -24, 0, 26), UDim2.new(0, 12, 0, 49), CFG.FUNDO_CARD, 0, pM
 	Instance.new("UICorner", mBox).CornerRadius = UDim.new(0, 6)
 	local mStr = brd(mBox, 1.3)
-	local bPrev = Instance.new("TextButton"); bPrev.Size, bPrev.Position, bPrev.BackgroundColor3, bPrev.Text = UDim2.new(0, 24, 1, -4), UDim2.new(0, 2, 0, 2), CFG.CINZA, "<"
-	bPrev.TextColor3, bPrev.Font, bPrev.TextSize, bPrev.BorderSizePixel, bPrev.Parent = Color3.fromRGB(240, 240, 250), Enum.Font.GothamBlack, 12, 0, mBox; Instance.new("UICorner", bPrev).CornerRadius = UDim.new(0, 4)
-	local lMod = Instance.new("TextLabel"); lMod.Size, lMod.Position, lMod.BackgroundTransparency = UDim2.new(1, -52, 1, 0), UDim2.new(0, 26, 0, 0), 1
-	lMod.Text, lMod.TextColor3, lMod.Font, lMod.TextSize, lMod.Parent = "Modo: " .. (CFG.MODOS_SPEED[S.speedIdx] or "CFrame"), Color3.fromRGB(220, 185, 255), Enum.Font.GothamBold, 10, mBox
-	local bNext = Instance.new("TextButton"); bNext.Size, bNext.Position, bNext.BackgroundColor3, bNext.Text = UDim2.new(0, 24, 1, -4), UDim2.new(1, -26, 0, 2), CFG.CINZA, ">"
-	bNext.TextColor3, bNext.Font, bNext.TextSize, bNext.BorderSizePixel, bNext.Parent = Color3.fromRGB(240, 240, 250), Enum.Font.GothamBlack, 12, 0, mBox; Instance.new("UICorner", bNext).CornerRadius = UDim.new(0, 4)
+	local bPrev = Instance.new("TextButton"); bPrev.Size, bPrev.Position, bPrev.BackgroundColor3, bPrev.Text = UDim2.new(0, 26, 1, -4), UDim2.new(0, 2, 0, 2), CFG.CINZA, "<"
+	bPrev.TextColor3, bPrev.Font, bPrev.TextSize, bPrev.BorderSizePixel, bPrev.Parent = Color3.fromRGB(245, 242, 255), Enum.Font.GothamBlack, 12, 0, mBox; bPrev.TextStrokeTransparency = 1; Instance.new("UICorner", bPrev).CornerRadius = UDim.new(0, 4)
+	local lMod = Instance.new("TextLabel"); lMod.Size, lMod.Position, lMod.BackgroundTransparency = UDim2.new(1, -56, 1, 0), UDim2.new(0, 28, 0, 0), 1
+	lMod.Text, lMod.TextColor3, lMod.Font, lMod.TextSize, lMod.Parent = "Modo: " .. (CFG.MODOS_SPEED[S.speedIdx] or "CFrame"), Color3.fromRGB(228, 196, 255), Enum.Font.GothamBold, 11, mBox; lMod.TextStrokeTransparency = 1
+	local bNext = Instance.new("TextButton"); bNext.Size, bNext.Position, bNext.BackgroundColor3, bNext.Text = UDim2.new(0, 26, 1, -4), UDim2.new(1, -28, 0, 2), CFG.CINZA, ">"
+	bNext.TextColor3, bNext.Font, bNext.TextSize, bNext.BorderSizePixel, bNext.Parent = Color3.fromRGB(245, 242, 255), Enum.Font.GothamBlack, 12, 0, mBox; bNext.TextStrokeTransparency = 1; Instance.new("UICorner", bNext).CornerRadius = UDim.new(0, 4)
 
 	local function updMod()
 		lMod.Text = "Modo: " .. (CFG.MODOS_SPEED[S.speedIdx] or "CFrame")
-		mStr.Color = S.speedOn and Color3.fromRGB(185, 115, 255) or CFG.ROXO
+		mStr.Color = S.speedOn and Color3.fromRGB(190, 125, 255) or CFG.ROXO
 		restWs()
 	end
 	local function cicMod(d) S.speedIdx = ((S.speedIdx - 1 + d) % #CFG.MODOS_SPEED) + 1; updMod() end
 	bPrev.MouseButton1Click:Connect(function() cicMod(-1) end)
 	bNext.MouseButton1Click:Connect(function() cicMod(1) end)
 
-	local slSpd = mkSlider(pM, "Velocidade Speed: ", 80, CFG.SPEED_MIN, CFG.SPEED_MAX, S.speedVal, function(v) S.speedVal = v end)
+	local slSpd = mkSlider(pM, "Velocidade Speed: ", 82, CFG.SPEED_MIN, CFG.SPEED_MAX, S.speedVal, function(v) S.speedVal = v end)
 
-	mkSec(pM, "Impulso & Pulo", 122)
-	local bJmp = mkBtn(pM, S.jumpOn and "Jump (Multi): ON" or "Jump (Multi): OFF", UDim2.new(0, 10, 0, 140), UDim2.new(1, -20, 0, 24), 11); bJmp.BackgroundColor3 = S.jumpOn and CFG.ROXO_ON or CFG.CINZA
-	local slJmp = mkSlider(pM, "Potência Jump: ", 170, CFG.JUMP_MIN, CFG.JUMP_MAX, S.jumpVal, function(v) S.jumpVal = v; aplJump() end)
+	mkSec(pM, "IMPULSO E PULO", 124)
+	local bJmp = mkBtn(pM, S.jumpOn and "Jump (Multi): ON" or "Jump (Multi): OFF", UDim2.new(0, 12, 0, 144), UDim2.new(1, -24, 0, 24), 11); bJmp.BackgroundColor3 = S.jumpOn and CFG.ROXO_ON or CFG.CINZA
+	local slJmp = mkSlider(pM, "Potência Jump: ", 174, CFG.JUMP_MIN, CFG.JUMP_MAX, S.jumpVal, function(v) S.jumpVal = v; aplJump() end)
 
 	local dM = Instance.new("TextLabel")
-	dM.Size, dM.Position, dM.BackgroundTransparency = UDim2.new(1, -20, 0, 52), UDim2.new(0, 10, 0, 212), 1
-	dM.Text, dM.TextColor3, dM.TextWrapped, dM.Font, dM.TextSize, dM.TextXAlignment, dM.Parent = "CFrame mantém a animação original sem travar o corpo. Jump ajustado de forma progressiva.", Color3.fromRGB(170, 170, 188), true, Enum.Font.Gotham, 10, Enum.TextXAlignment.Left, pM
+	dM.Size, dM.Position, dM.BackgroundTransparency = UDim2.new(1, -24, 0, 52), UDim2.new(0, 12, 0, 216), 1
+	dM.Text, dM.TextColor3, dM.TextWrapped, dM.Font, dM.TextSize, dM.TextXAlignment, dM.Parent = "CFrame mantém a animação original sem travar o corpo. Jump ajustado de forma progressiva.", Color3.fromRGB(182, 178, 200), true, Enum.Font.Gotham, 11, Enum.TextXAlignment.Left, pM
+	dM.TextStrokeTransparency = 1
 
 	-- ==========================
-	-- ABA VISUAL (COM SUBTÍTULOS)
+	-- ABA VISUAL (SUBTÍTULOS MAIÚSCULOS)
 	-- ==========================
 	local pV = tPags.Visual
-	mkSec(pV, "Personagem & HUD", 0)
-	local bNa = mkBtn(pV, S.noAnim and "No Animation: ON" or "No Animation: OFF", UDim2.new(0, 10, 0, 18), UDim2.new(1, -20, 0, 23), 11); bNa.BackgroundColor3 = S.noAnim and CFG.ROXO_ON or CFG.CINZA
-	local bIv = mkBtn(pV, S.inv and "Invisível: ON" or "Invisível: OFF", UDim2.new(0, 10, 0, 45), UDim2.new(1, -20, 0, 23), 11); bIv.BackgroundColor3 = S.inv and CFG.ROXO_ON or CFG.CINZA
-	local bHl = mkBtn(pV, S.hudLosango and "HUD Losango: ON" or "HUD Losango: OFF", UDim2.new(0, 10, 0, 72), UDim2.new(0.5, -12, 0, 22), 10); bHl.BackgroundColor3 = S.hudLosango and CFG.ROXO_ON or CFG.CINZA
-	local bHs = mkBtn(pV, S.hudStats and "FPS / MS: ON" or "FPS / MS: OFF", UDim2.new(0.5, 2, 0, 72), UDim2.new(0.5, -12, 0, 22), 10); bHs.BackgroundColor3 = S.hudStats and CFG.ROXO_ON or CFG.CINZA
+	mkSec(pV, "PERSONAGEM E HUD", 0)
+	local bNa = mkBtn(pV, S.noAnim and "No Animation: ON" or "No Animation: OFF", UDim2.new(0, 12, 0, 20), UDim2.new(1, -24, 0, 23), 11); bNa.BackgroundColor3 = S.noAnim and CFG.ROXO_ON or CFG.CINZA
+	local bIv = mkBtn(pV, S.inv and "Invisível: ON" or "Invisível: OFF", UDim2.new(0, 12, 0, 47), UDim2.new(1, -24, 0, 23), 11); bIv.BackgroundColor3 = S.inv and CFG.ROXO_ON or CFG.CINZA
+	local bHl = mkBtn(pV, S.hudLosango and "HUD Losango: ON" or "HUD Losango: OFF", UDim2.new(0, 12, 0, 74), UDim2.new(0.5, -15, 0, 22), 11); bHl.BackgroundColor3 = S.hudLosango and CFG.ROXO_ON or CFG.CINZA
+	local bHs = mkBtn(pV, S.hudStats and "FPS / MS: ON" or "FPS / MS: OFF", UDim2.new(0.5, 3, 0, 74), UDim2.new(0.5, -15, 0, 22), 11); bHs.BackgroundColor3 = S.hudStats and CFG.ROXO_ON or CFG.CINZA
 
-	mkSec(pV, "VOID ESP", 103)
-	local bEsp = mkBtn(pV, S.espOn and "VOID ESP: ON" or "VOID ESP: OFF", UDim2.new(0, 10, 0, 121), UDim2.new(1, -20, 0, 23), 11); bEsp.BackgroundColor3 = S.espOn and CFG.ROXO_ON or CFG.CINZA
-	local bEspN = mkBtn(pV, S.espName and "ESP Name: ON" or "ESP Name: OFF", UDim2.new(0, 10, 0, 148), UDim2.new(0.5, -12, 0, 21), 10); bEspN.BackgroundColor3 = S.espName and CFG.ROXO_ON or CFG.CINZA
-	local bEspH = mkBtn(pV, S.espHp and "ESP Health: ON" or "ESP Health: OFF", UDim2.new(0.5, 2, 0, 148), UDim2.new(0.5, -12, 0, 21), 10); bEspH.BackgroundColor3 = S.espHp and CFG.ROXO_ON or CFG.CINZA
-	local bEspB = mkBtn(pV, S.espBody and "ESP Body: ON" or "ESP Body: OFF", UDim2.new(0, 10, 0, 173), UDim2.new(1, -20, 0, 21), 10); bEspB.BackgroundColor3 = S.espBody and CFG.ROXO_ON or CFG.CINZA
+	mkSec(pV, "VOID ESP", 105)
+	local bEsp = mkBtn(pV, S.espOn and "VOID ESP: ON" or "VOID ESP: OFF", UDim2.new(0, 12, 0, 125), UDim2.new(1, -24, 0, 23), 11); bEsp.BackgroundColor3 = S.espOn and CFG.ROXO_ON or CFG.CINZA
+	local bEspN = mkBtn(pV, S.espName and "ESP Name: ON" or "ESP Name: OFF", UDim2.new(0, 12, 0, 152), UDim2.new(0.5, -15, 0, 21), 11); bEspN.BackgroundColor3 = S.espName and CFG.ROXO_ON or CFG.CINZA
+	local bEspH = mkBtn(pV, S.espHp and "ESP Health: ON" or "ESP Health: OFF", UDim2.new(0.5, 3, 0, 152), UDim2.new(0.5, -15, 0, 21), 11); bEspH.BackgroundColor3 = S.espHp and CFG.ROXO_ON or CFG.CINZA
+	local bEspB = mkBtn(pV, S.espBody and "ESP Body: ON" or "ESP Body: OFF", UDim2.new(0, 12, 0, 177), UDim2.new(1, -24, 0, 21), 11); bEspB.BackgroundColor3 = S.espBody and CFG.ROXO_ON or CFG.CINZA
 
 	local dV = Instance.new("TextLabel")
-	dV.Size, dV.Position, dV.BackgroundTransparency = UDim2.new(1, -20, 0, 52), UDim2.new(0, 10, 0, 202), 1
-	dV.Text, dV.TextColor3, dV.TextWrapped, dV.Font, dV.TextSize, dV.TextXAlignment, dV.Parent = "ESP Name + barra de vida dinâmica (verde -> amarelo -> vermelho) + Body. Respeita AMG e Focus.", Color3.fromRGB(170, 170, 188), true, Enum.Font.Gotham, 10, Enum.TextXAlignment.Left, pV
+	dV.Size, dV.Position, dV.BackgroundTransparency = UDim2.new(1, -24, 0, 52), UDim2.new(0, 12, 0, 206), 1
+	dV.Text, dV.TextColor3, dV.TextWrapped, dV.Font, dV.TextSize, dV.TextXAlignment, dV.Parent = "ESP Name + barra de vida dinâmica (verde -> amarelo -> vermelho) + Body. Respeita AMG e Focus.", Color3.fromRGB(182, 178, 200), true, Enum.Font.Gotham, 11, Enum.TextXAlignment.Left, pV
+	dV.TextStrokeTransparency = 1
 
 	-- ==========================
-	-- ABA CONFIG (COM SUBTÍTULOS)
+	-- ABA CONFIG (SUBTÍTULOS MAIÚSCULOS)
 	-- ==========================
 	local pCfg = tPags.Config
-	mkSec(pCfg, "Desempenho & Janela", 0)
-	local bOpt = mkBtn(pCfg, S.boostFps and "Otimizar FPS / Rede: ON" or "Otimizar FPS / Rede: OFF", UDim2.new(0, 10, 0, 18), UDim2.new(1, -20, 0, 25), 10); bOpt.BackgroundColor3 = S.boostFps and CFG.ROXO_ON or CFG.CINZA
-	local bRst = mkBtn(pCfg, "Resetar Posição", UDim2.new(0, 10, 0, 48), UDim2.new(1, -20, 0, 25), 11)
+	mkSec(pCfg, "DESEMPENHO E JANELA", 0)
+	local bOpt = mkBtn(pCfg, S.boostFps and "Otimizar FPS / Rede: ON" or "Otimizar FPS / Rede: OFF", UDim2.new(0, 12, 0, 20), UDim2.new(1, -24, 0, 25), 11); bOpt.BackgroundColor3 = S.boostFps and CFG.ROXO_ON or CFG.CINZA
+	local bRst = mkBtn(pCfg, "Resetar Posição", UDim2.new(0, 12, 0, 50), UDim2.new(1, -24, 0, 25), 11)
 
-	mkSec(pCfg, "Atalhos do Teclado", 84)
+	mkSec(pCfg, "ATALHOS DO TECLADO", 86)
 	local infCard = Instance.new("Frame")
-	infCard.Size = UDim2.new(1, -20, 0, 102)
-	infCard.Position = UDim2.new(0, 10, 0, 102)
+	infCard.Size = UDim2.new(1, -24, 0, 108)
+	infCard.Position = UDim2.new(0, 12, 0, 106)
 	infCard.BackgroundColor3 = CFG.FUNDO_CARD
 	infCard.BorderSizePixel = 0
 	infCard.Parent = pCfg
 	Instance.new("UICorner", infCard).CornerRadius = UDim.new(0, 6)
-	brd(infCard, 1)
+	brd(infCard, 1.1)
 
 	local inf = Instance.new("TextLabel")
-	inf.Size, inf.Position, inf.BackgroundTransparency = UDim2.new(1, -14, 1, -10), UDim2.new(0, 7, 0, 5), 1
-	inf.Text, inf.TextColor3, inf.TextWrapped, inf.Font, inf.TextSize = "AutoClick: E\nKill Aura: Q\nGrab Assist: G\nAbrir / Ocultar Painel: J\nCancelar PvP Loop: R / RMB", Color3.fromRGB(205, 205, 222), true, Enum.Font.GothamMedium, 10
+	inf.Size, inf.Position, inf.BackgroundTransparency = UDim2.new(1, -16, 1, -10), UDim2.new(0, 8, 0, 5), 1
+	inf.Text, inf.TextColor3, inf.TextWrapped, inf.Font, inf.TextSize = "AutoClick: E\nKill Aura: Q\nGrab Assist: G\nAbrir / Ocultar Painel: J\nCancelar PvP Loop: R / RMB", Color3.fromRGB(220, 216, 236), true, Enum.Font.GothamMedium, 11
 	inf.TextXAlignment, inf.TextYAlignment, inf.Parent = Enum.TextXAlignment.Left, Enum.TextYAlignment.Top, infCard
+	inf.TextStrokeTransparency = 1
 
 	local rod = Instance.new("TextLabel")
-	rod.Size, rod.Position, rod.BackgroundTransparency = UDim2.new(1, -20, 0, 16), UDim2.new(0, 10, 1, -20), 1
-	rod.Text, rod.TextColor3, rod.Font, rod.TextSize, rod.Parent = "By: VOID Santos7x", Color3.fromRGB(220, 200, 255), Enum.Font.GothamBold, 10, fr
+	rod.Size, rod.Position, rod.BackgroundTransparency = UDim2.new(1, -24, 0, 18), UDim2.new(0, 12, 1, -22), 1
+	rod.Text, rod.TextColor3, rod.Font, rod.TextSize, rod.ZIndex, rod.Parent = "By: VOID Santos7x", Color3.fromRGB(228, 196, 255), Enum.Font.GothamBold, 11, 2, fr
+	rod.TextStrokeTransparency = 1
 
 	local dragSl, dragFr, offFr = nil, false, Vector2.zero
 	for _, sl in ipairs({ slGrabDist, slGrabPull, slSize, slSpd, slJmp }) do
@@ -2134,4 +2214,4 @@ Players.PlayerRemoving:Connect(function(plr)
 	S.limpEspPlr(plr)
 end)
 
-print("[The VOID Painel] Design otimizado + Motor ROLEX de Spam Grab integrado.")
+print("[The VOID Painel] Design roxo Nexus & preto + largura 1.5x aplicados.")
