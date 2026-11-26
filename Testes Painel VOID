@@ -80,7 +80,7 @@ local KILL_AURA_PADRAO_ATIVO = false
 local FIGHTING_PADRAO_ATIVO = false
 local NO_ANIMATION_PADRAO_ATIVO = false
 local INVISIVEL_PADRAO_ATIVO = false
-local INVISIVEL_PROFUNDIDADE = EH_HIGHSCHOOL_RP and 2.6 or 2.8
+local INVISIVEL_PROFUNDIDADE = EH_HIGHSCHOOL_RP and 6.5 or 6.0
 local HUD_LOSANGO_PADRAO_VISIVEL = true
 local HUD_STATS_PADRAO_VISIVEL = true
 local SPEED_CFRAME_PADRAO_ATIVO = false
@@ -214,9 +214,9 @@ local function setKillAuraEstado(novoEstado)
 end
 
 -- ==========================================
--- FIGHTING TOGGLE (INSTANTANEO E LEVE, COM PRIORIDADE HIGHSCHOOL RP)
+-- FIGHTING TOGGLE (SINCRONIZADO COM QUADRA E FERRAMENTAS)
 -- ==========================================
-local PALAVRAS_FIGHT = { "fight", "pvp", "combat", "incombat", "battle", "brawl", "ragdoll" }
+local PALAVRAS_FIGHT = { "fight", "pvp", "combat", "incombat", "battle", "brawl", "ragdoll", "safe" }
 
 local function nomeEhFight(nome)
 	if not nome or nome == "" then return false end
@@ -229,6 +229,42 @@ local function nomeEhFight(nome)
 	return false
 end
 
+local function liberarFerramentasECombate(char, hum)
+	if hum then
+		pcall(function()
+			if hum.Sit then
+				hum.Sit = false
+			end
+			if hum.PlatformStand then
+				hum.PlatformStand = false
+			end
+			local st = hum:GetState()
+			if st == Enum.HumanoidStateType.Ragdoll or st == Enum.HumanoidStateType.FallingDown or st == Enum.HumanoidStateType.Physics then
+				hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+			end
+		end)
+	end
+	if char then
+		for _, item in ipairs(char:GetChildren()) do
+			if item:IsA("Tool") then
+				pcall(function()
+					item.Enabled = true
+				end)
+			end
+		end
+	end
+	local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+	if backpack then
+		for _, item in ipairs(backpack:GetChildren()) do
+			if item:IsA("Tool") then
+				pcall(function()
+					item.Enabled = true
+				end)
+			end
+		end
+	end
+end
+
 local function alternarEstadoFighting(ativar)
 	fightingAtivo = ativar
 	local char = LocalPlayer.Character
@@ -237,8 +273,10 @@ local function alternarEstadoFighting(ativar)
 	local function ajustarContainer(container)
 		if not container then return end
 		for _, desc in ipairs(container:GetDescendants()) do
+			local lowName = string.lower(desc.Name or "")
 			if desc:IsA("BoolValue") and nomeEhFight(desc.Name) then
-				pcall(function() desc.Value = ativar end)
+				local val = string.find(lowName, "safe", 1, true) and (not ativar) or ativar
+				pcall(function() desc.Value = val end)
 			elseif desc:IsA("StringValue") and nomeEhFight(desc.Name) then
 				pcall(function() desc.Value = ativar and "Fighting" or "" end)
 			end
@@ -246,8 +284,10 @@ local function alternarEstadoFighting(ativar)
 		pcall(function()
 			for attrName, attrVal in pairs(container:GetAttributes()) do
 				if nomeEhFight(attrName) then
+					local lowAttr = string.lower(attrName)
 					if typeof(attrVal) == "boolean" then
-						container:SetAttribute(attrName, ativar)
+						local val = string.find(lowAttr, "safe", 1, true) and (not ativar) or ativar
+						container:SetAttribute(attrName, val)
 					elseif typeof(attrVal) == "string" then
 						container:SetAttribute(attrName, ativar and "Fighting" or "")
 					end
@@ -258,18 +298,7 @@ local function alternarEstadoFighting(ativar)
 
 	ajustarContainer(LocalPlayer)
 	ajustarContainer(char)
-
-	-- No Highschool Experience RP, garante que o personagem local nao fique preso em Sit ou ragdoll ao ativar luta
-	if EH_HIGHSCHOOL_RP and ativar and hum then
-		pcall(function()
-			if hum.Sit then
-				hum.Sit = false
-			end
-			if hum.PlatformStand then
-				hum.PlatformStand = false
-			end
-		end)
-	end
+	liberarFerramentasECombate(char, hum)
 
 	pcall(function()
 		for _, desc in ipairs(ReplicatedStorage:GetDescendants()) do
@@ -679,7 +708,7 @@ local function sincronizarNoAnimation()
 end
 
 -- ==========================================
--- INVISIVEL (DEITADO COLADO SOB O CHAO + MOVIMENTO LIVRE)
+-- INVISIVEL (DEITADO ABAIXO DO CHAO + CAMERA NORMAL ACIMA)
 -- ==========================================
 local function aplicarVisualFantasmaLocal(char, ativar)
 	if not char then return end
@@ -724,28 +753,15 @@ end
 
 local function restaurarSuperficieAntesDoRender()
 	local char = LocalPlayer.Character
-	local root = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
-	if desyncSubsoloAplicado and root and cframeSuperficieInvisivel then
-		pcall(function()
-			local posAtual = root.Position
-			local _, yawAtual, _ = root.CFrame:ToEulerAnglesYXZ()
-			root.CFrame = CFrame.new(posAtual.X, cframeSuperficieInvisivel.Position.Y, posAtual.Z) * CFrame.fromEulerAnglesYXZ(0, yawAtual, 0)
-		end)
-		desyncSubsoloAplicado = false
-	end
-	if invisivelAtivo then
-		if char then
-			aplicarVisualFantasmaLocal(char, true)
-		end
+	if invisivelAtivo and char then
+		aplicarVisualFantasmaLocal(char, true)
 		garantirCameraNativaInvisivel()
 	end
 end
 
 local function aplicarInvisivelDesyncHeartbeat()
 	if not invisivelAtivo then
-		if desyncSubsoloAplicado then
-			restaurarSuperficieAntesDoRender()
-		end
+		desyncSubsoloAplicado = false
 		return
 	end
 
@@ -756,24 +772,29 @@ local function aplicarInvisivelDesyncHeartbeat()
 	local root = char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
 	if not root then return end
 
-	local ySuperficie = root.Position.Y
-	cframeSuperficieInvisivel = CFrame.new(root.Position.X, ySuperficie, root.Position.Z)
+	local yAtual = root.Position.Y
+	if not desyncSubsoloAplicado or not cframeSuperficieInvisivel then
+		cframeSuperficieInvisivel = CFrame.new(root.Position.X, yAtual, root.Position.Z)
+	else
+		cframeSuperficieInvisivel = CFrame.new(root.Position.X, math.max(cframeSuperficieInvisivel.Position.Y, yAtual + INVISIVEL_PROFUNDIDADE), root.Position.Z)
+	end
 
 	local alturaLimiteVoid = workspace.FallenPartsDestroyHeight + 25
-	local yDeitadoColado = math.max(ySuperficie - INVISIVEL_PROFUNDIDADE, alturaLimiteVoid)
+	local yAbaixoDoChao = math.max(yAtual - INVISIVEL_PROFUNDIDADE, alturaLimiteVoid)
 	local _, yawAtual, _ = root.CFrame:ToEulerAnglesYXZ()
 	local orientacaoDeitada = CFrame.fromEulerAnglesYXZ(0, yawAtual, 0) * CFrame.Angles(math.rad(88), 0, 0)
 
 	pcall(function()
-		root.CFrame = CFrame.new(root.Position.X, yDeitadoColado, root.Position.Z) * orientacaoDeitada
+		root.CFrame = CFrame.new(root.Position.X, yAbaixoDoChao, root.Position.Z) * orientacaoDeitada
 	end)
 	desyncSubsoloAplicado = true
+	garantirCameraNativaInvisivel()
 end
 
 local function setInvisivelEstado(novoEstado)
 	invisivelAtivo = novoEstado
 	if not invisivelAtivo then
-		restaurarSuperficieAntesDoRender()
+		desyncSubsoloAplicado = false
 		cframeSuperficieInvisivel = nil
 		aplicarVisualFantasmaLocal(LocalPlayer.Character, false)
 		garantirCameraNativaInvisivel()
@@ -781,7 +802,12 @@ local function setInvisivelEstado(novoEstado)
 		local char = LocalPlayer.Character
 		local root = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
 		if root then
-			cframeSuperficieInvisivel = root.CFrame
+			cframeSuperficieInvisivel = CFrame.new(root.Position.X, root.Position.Y, root.Position.Z)
+			pcall(function()
+				local _, yawAtual, _ = root.CFrame:ToEulerAnglesYXZ()
+				root.CFrame = CFrame.new(root.Position.X, root.Position.Y - INVISIVEL_PROFUNDIDADE, root.Position.Z) * CFrame.fromEulerAnglesYXZ(0, yawAtual, 0) * CFrame.Angles(math.rad(88), 0, 0)
+			end)
+			desyncSubsoloAplicado = true
 		end
 		aplicarVisualFantasmaLocal(char, true)
 		garantirCameraNativaInvisivel()
@@ -1583,6 +1609,7 @@ local function dispararPulsoAtaque(char, meuRoot)
 		local tool = char:FindFirstChildOfClass("Tool")
 		if tool and tool.Parent == char then
 			pcall(function()
+				tool.Enabled = true
 				tool:Activate()
 			end)
 		end
@@ -2671,7 +2698,6 @@ end)
 
 RunService.Heartbeat:Connect(function(dt)
 	local agora = os.clock()
-	restaurarSuperficieAntesDoRender()
 	aplicarBackCostas()
 	aplicarNoSlow()
 	aplicarJumpMultiplicador()
