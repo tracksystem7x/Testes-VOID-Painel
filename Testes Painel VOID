@@ -58,10 +58,10 @@ local ANTI_GRAB_RAG_PADRAO_ATIVO = false
 local DEATH_TP_PADRAO_ATIVO = false
 local NO_SLOW_PADRAO_ATIVO = false
 local KILL_AURA_PADRAO_ATIVO = false
-local FORCE_COMBAT_PADRAO_ATIVO = false
+local FIGHTING_PADRAO_ATIVO = false
 local NO_ANIMATION_PADRAO_ATIVO = false
 local INVISIVEL_PADRAO_ATIVO = false
-local INVISIVEL_PROFUNDIDADE = 3.2
+local INVISIVEL_PROFUNDIDADE = 2.8
 local HUD_LOSANGO_PADRAO_VISIVEL = true
 local HUD_STATS_PADRAO_VISIVEL = true
 local SPEED_CFRAME_PADRAO_ATIVO = false
@@ -105,7 +105,7 @@ local antiGrabRagAtivo = ANTI_GRAB_RAG_PADRAO_ATIVO
 local deathTpAtivo = DEATH_TP_PADRAO_ATIVO
 local noSlowAtivo = NO_SLOW_PADRAO_ATIVO
 local killAuraAtivo = KILL_AURA_PADRAO_ATIVO
-local forceCombatAtivo = FORCE_COMBAT_PADRAO_ATIVO
+local fightingAtivo = FIGHTING_PADRAO_ATIVO
 local noAnimationAtivo = NO_ANIMATION_PADRAO_ATIVO
 local invisivelAtivo = INVISIVEL_PADRAO_ATIVO
 local cframeSuperficieInvisivel = nil
@@ -128,7 +128,6 @@ local alvoKillAuraPlayer = nil
 local ultimoDisparoKillAuraTick = 0
 local ultimoDisparoAutoClickTick = 0
 local janelaRegistroHitAte = 0
-local ultimoScanCombatTick = 0
 
 local hitboxAtivo = HITBOX_PADRAO_ATIVO
 local hitboxVisivel = HITBOX_VISIVEL_PADRAO
@@ -196,14 +195,14 @@ local function setKillAuraEstado(novoEstado)
 end
 
 -- ==========================================
--- FORCE COMBAT (DETECCAO E MANUTENCAO DE ESTADO DE COMBATE)
+-- FIGHTING TOGGLE (INSTANTANEO E LEVE, SEM LOOP PESADO)
 -- ==========================================
-local PALAVRAS_COMBAT = { "pvp", "combat", "fight", "battle", "arena", "danger", "hostile", "incombat" }
+local PALAVRAS_FIGHT = { "fight", "pvp", "combat", "incombat", "battle" }
 
-local function nomeIndicaCombate(nome)
+local function nomeEhFight(nome)
 	if not nome or nome == "" then return false end
 	local low = string.lower(nome)
-	for _, p in ipairs(PALAVRAS_COMBAT) do
+	for _, p in ipairs(PALAVRAS_FIGHT) do
 		if string.find(low, p, 1, true) then
 			return true
 		end
@@ -211,90 +210,44 @@ local function nomeIndicaCombate(nome)
 	return false
 end
 
-local function executarForcaCombate(logarDetalhes)
-	if not forceCombatAtivo then return end
-	local agora = os.clock()
-	local deveLogar = logarDetalhes or ((agora - ultimoScanCombatTick) >= 2.0)
-	if deveLogar then
-		ultimoScanCombatTick = agora
-	end
-
-	local encontrados = {}
+local function alternarEstadoFighting(ativar)
+	fightingAtivo = ativar
 	local char = LocalPlayer.Character
-	local root = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
 
-	local function inspecionarContainer(container)
+	local function ajustarContainer(container)
 		if not container then return end
 		for _, desc in ipairs(container:GetDescendants()) do
-			if desc:IsA("BoolValue") and nomeIndicaCombate(desc.Name) then
-				if not desc.Value then
-					pcall(function() desc.Value = true end)
-				end
-				table.insert(encontrados, "BoolValue:" .. desc:GetFullName())
-			elseif desc:IsA("StringValue") and nomeIndicaCombate(desc.Name) then
-				if desc.Value == "" or string.lower(desc.Value) == "false" or string.lower(desc.Value) == "safe" then
-					pcall(function() desc.Value = "Combat" end)
-				end
-				table.insert(encontrados, "StringValue:" .. desc:GetFullName())
+			if desc:IsA("BoolValue") and nomeEhFight(desc.Name) then
+				pcall(function() desc.Value = ativar end)
+			elseif desc:IsA("StringValue") and nomeEhFight(desc.Name) then
+				pcall(function() desc.Value = ativar and "Fighting" or "" end)
 			end
 		end
-
 		pcall(function()
 			for attrName, attrVal in pairs(container:GetAttributes()) do
-				if nomeIndicaCombate(attrName) then
-					if typeof(attrVal) == "boolean" and not attrVal then
-						container:SetAttribute(attrName, true)
-					elseif typeof(attrVal) == "string" and (attrVal == "" or string.lower(attrVal) == "false" or string.lower(attrVal) == "safe") then
-						container:SetAttribute(attrName, "Combat")
+				if nomeEhFight(attrName) then
+					if typeof(attrVal) == "boolean" then
+						container:SetAttribute(attrName, ativar)
+					elseif typeof(attrVal) == "string" then
+						container:SetAttribute(attrName, ativar and "Fighting" or "")
 					end
-					table.insert(encontrados, "Attr:" .. container.Name .. "." .. attrName)
 				end
 			end
 		end)
 	end
 
-	inspecionarContainer(LocalPlayer)
-	inspecionarContainer(char)
+	ajustarContainer(LocalPlayer)
+	ajustarContainer(char)
 
 	pcall(function()
 		for _, desc in ipairs(ReplicatedStorage:GetDescendants()) do
-			if desc:IsA("RemoteEvent") and nomeIndicaCombate(desc.Name) then
+			if desc:IsA("RemoteEvent") and nomeEhFight(desc.Name) then
 				pcall(function()
-					desc:FireServer(true)
-					desc:FireServer("Combat")
-					desc:FireServer("EnterPvP")
+					desc:FireServer(ativar)
 				end)
-				table.insert(encontrados, "Remote:" .. desc.Name)
 			end
 		end
 	end)
-
-	if root and typeof(firetouchinterest) == "function" then
-		pcall(function()
-			for _, obj in ipairs(workspace:GetDescendants()) do
-				if obj:IsA("BasePart") and nomeIndicaCombate(obj.Name) then
-					firetouchinterest(root, obj, 0)
-					firetouchinterest(root, obj, 1)
-					table.insert(encontrados, "Zone:" .. obj.Name)
-				end
-			end
-		end)
-	end
-
-	if deveLogar then
-		if #encontrados > 0 then
-			print("[Force Combat] Sinais detectados/acionados (" .. tostring(#encontrados) .. "): " .. table.concat(encontrados, ", "))
-		else
-			warn("[Force Combat] Ativo, mas nenhum Remote/BoolValue/Zona nomeada com PvP/Combat foi exposta ao cliente.")
-		end
-	end
-end
-
-local function setForceCombatEstado(novoEstado)
-	forceCombatAtivo = novoEstado
-	if forceCombatAtivo then
-		executarForcaCombate(true)
-	end
 end
 
 -- ==========================================
@@ -694,7 +647,7 @@ local function sincronizarNoAnimation()
 end
 
 -- ==========================================
--- INVISIVEL (DESYNC SEGURO COM MOVIMENTO LIVRE E CAMERA NORMAL)
+-- INVISIVEL (DEITADO COLADO SOB O CHAO + MOVIMENTO LIVRE)
 -- ==========================================
 local function aplicarVisualFantasmaLocal(char, ativar)
 	if not char then return end
@@ -775,11 +728,12 @@ local function aplicarInvisivelDesyncHeartbeat()
 	cframeSuperficieInvisivel = CFrame.new(root.Position.X, ySuperficie, root.Position.Z)
 
 	local alturaLimiteVoid = workspace.FallenPartsDestroyHeight + 25
-	local ySubsolo = math.max(ySuperficie - INVISIVEL_PROFUNDIDADE, alturaLimiteVoid)
+	local yDeitadoColado = math.max(ySuperficie - INVISIVEL_PROFUNDIDADE, alturaLimiteVoid)
 	local _, yawAtual, _ = root.CFrame:ToEulerAnglesYXZ()
+	local orientacaoDeitada = CFrame.fromEulerAnglesYXZ(0, yawAtual, 0) * CFrame.Angles(math.rad(88), 0, 0)
 
 	pcall(function()
-		root.CFrame = CFrame.new(root.Position.X, ySubsolo, root.Position.Z) * CFrame.fromEulerAnglesYXZ(0, yawAtual, 0)
+		root.CFrame = CFrame.new(root.Position.X, yDeitadoColado, root.Position.Z) * orientacaoDeitada
 	end)
 	desyncSubsoloAplicado = true
 end
@@ -887,6 +841,13 @@ LocalPlayer.CharacterAdded:Connect(function(novoChar)
 	local destinoMorte = ultimaPosicaoMorte
 	conectarMonitorMorte(novoChar)
 	recuperarEstadoAposQueda(novoChar)
+	if fightingAtivo then
+		task.delay(0.3, function()
+			if fightingAtivo then
+				alternarEstadoFighting(true)
+			end
+		end)
+	end
 
 	if deathTpAtivo and destinoMorte then
 		task.spawn(function()
@@ -934,7 +895,6 @@ local function getCharAndRoot(plr)
 	local char = plr and plr.Character
 	if not char then return nil, nil, nil end
 	local hum = char:FindFirstChildOfClass("Humanoid")
-	-- Só considera morto quando Health <= 0 (se estiver caido por 8 hits, Health > 0 continua vivo!)
 	if hum and hum.Health <= 0 then return char, nil, hum end
 	local root = char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
 	return char, root, hum
@@ -2100,14 +2060,14 @@ local function criarPainelHitbox()
 	)
 	btnKillAura.BackgroundColor3 = killAuraAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
 
-	local btnForceCombat = criarBotaoPadrao(
+	local btnFighting = criarBotaoPadrao(
 		pagCombat,
-		forceCombatAtivo and "Force Combat: ON" or "Force Combat: OFF",
+		fightingAtivo and "Disable Fighting" or "Enable Fighting",
 		UDim2.new(0, 8, 0, 189),
 		UDim2.new(1, -16, 0, 19),
 		11
 	)
-	btnForceCombat.BackgroundColor3 = forceCombatAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
+	btnFighting.BackgroundColor3 = fightingAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
 
 	local btnHit = criarBotaoPadrao(
 		pagCombat,
@@ -2461,10 +2421,11 @@ local function criarPainelHitbox()
 		setKillAuraEstado(not killAuraAtivo)
 	end)
 
-	btnForceCombat.MouseButton1Click:Connect(function()
-		setForceCombatEstado(not forceCombatAtivo)
-		btnForceCombat.Text = forceCombatAtivo and "Force Combat: ON" or "Force Combat: OFF"
-		btnForceCombat.BackgroundColor3 = forceCombatAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
+	btnFighting.MouseButton1Click:Connect(function()
+		local proximoEstado = not fightingAtivo
+		alternarEstadoFighting(proximoEstado)
+		btnFighting.Text = fightingAtivo and "Disable Fighting" or "Enable Fighting"
+		btnFighting.BackgroundColor3 = fightingAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
 	end)
 
 	btnHit.MouseButton1Click:Connect(function()
@@ -2679,7 +2640,6 @@ end)
 RunService.Heartbeat:Connect(function(dt)
 	local agora = os.clock()
 	restaurarSuperficieAntesDoRender()
-	executarForcaCombate(false)
 	aplicarBackCostas()
 	aplicarNoSlow()
 	aplicarJumpMultiplicador()
