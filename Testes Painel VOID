@@ -88,7 +88,7 @@ local FIGHTING_PADRAO_ATIVO = false
 local NO_ANIMATION_PADRAO_ATIVO = false
 local INVISIVEL_PADRAO_ATIVO = false
 
--- Abaixo do piso da quadra e corredor para ficar oculto de verdade
+-- Abaixo do piso da quadra e corredor para ficar oculto de verdade (4.1 studs)
 local INVISIVEL_PROFUNDIDADE = 4.1
 local COR_PISO_QUADRA = Color3.fromRGB(196, 154, 108)
 
@@ -769,7 +769,7 @@ local function sincronizarNoAnimation()
 end
 
 -- ==========================================
--- INVISIVEL (FIO REAL ABAIXO DO CHAO + SEM ACESSORIOS/ROUPA/NOME)
+-- INVISIVEL (FIO REAL ABAIXO DO CHAO + CADEADO EM -4.1)
 -- ==========================================
 local function obterCachePartesPersonagem(char)
 	if not char then return {} end
@@ -1102,7 +1102,8 @@ end
 
 local ultimoSyncTamanhoInvisivel = 0
 
-local function fixarRootAbaixoChao(root, hum)
+-- CADEADO MESTRE DE POSICAO EM -4.1 (sem subida ao usar Kill Aura / AutoClick)
+local function travarPosicaoInvisivelCadeado(char, root, hum)
 	if not invisivelAtivo or not posSuperficieInvisivel or not root or not root.Parent then
 		return
 	end
@@ -1115,20 +1116,35 @@ local function fixarRootAbaixoChao(root, hum)
 	pcall(function()
 		if hum then
 			if hum.Sit then hum.Sit = false end
-			if hum.PlatformStand then hum.PlatformStand = false end
 			if hum.Jump then hum.Jump = false end
+			if hum.PlatformStand then hum.PlatformStand = false end
 		end
-		if root.CanCollide then root.CanCollide = false end
-		local vel = root.AssemblyLinearVelocity
-		if vel.Magnitude > 0.01 or vel.Y > 0 then
-			root.AssemblyLinearVelocity = Vector3.zero
+		if root.Anchored then
+			root.Anchored = false
 		end
-		if root.AssemblyAngularVelocity.Magnitude > 0.01 then
-			root.AssemblyAngularVelocity = Vector3.zero
+		if root.CanCollide then
+			root.CanCollide = false
 		end
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
 		root.RotVelocity = Vector3.zero
 		root.CFrame = cfFioDeitadoSubsolo
+
+		if char then
+			for _, part in ipairs(char:GetChildren()) do
+				if part:IsA("BasePart") and part ~= root then
+					if part.CanCollide then part.CanCollide = false end
+					part.AssemblyLinearVelocity = Vector3.zero
+					part.AssemblyAngularVelocity = Vector3.zero
+				end
+			end
+		end
 	end)
+end
+
+local function fixarRootAbaixoChao(root, hum)
+	local char = root and root.Parent
+	travarPosicaoInvisivelCadeado(char, root, hum)
 end
 
 local function atualizarInvisivelSubsolo(dt, agora)
@@ -1166,7 +1182,7 @@ local function atualizarInvisivelSubsolo(dt, agora)
 		end
 	end
 
-	fixarRootAbaixoChao(root, hum)
+	travarPosicaoInvisivelCadeado(char, root, hum)
 
 	local now = agora or os.clock()
 	local aplicarTamanhos = (now - ultimoSyncTamanhoInvisivel) >= 0.35
@@ -2011,6 +2027,10 @@ local function executarCliqueRapido()
 end
 
 local function dispararPulsoAtaque(char, meuRoot, agora, ativarTool)
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if invisivelAtivo and meuRoot then
+		travarPosicaoInvisivelCadeado(char, meuRoot, hum)
+	end
 	if not invisivelAtivo then
 		garantirEstadoCombateParaAtaque(agora)
 	end
@@ -2028,8 +2048,7 @@ local function dispararPulsoAtaque(char, meuRoot, agora, ativarTool)
 	end
 	executarCliqueRapido()
 	if invisivelAtivo and meuRoot then
-		local hum = char and char:FindFirstChildOfClass("Humanoid")
-		fixarRootAbaixoChao(meuRoot, hum)
+		travarPosicaoInvisivelCadeado(char, meuRoot, hum)
 	end
 end
 
@@ -2038,13 +2057,21 @@ local function processarKillAuraFrame(agora)
 	if UserInputService:GetFocusedTextBox() then return false end
 	local delayAtual = obterDelayKillAuraAtual()
 	if (agora - ultimoDisparoKillAuraTick) < delayAtual then
+		if invisivelAtivo then
+			local c, r, h = getCharAndRoot(LocalPlayer)
+			if c and r then travarPosicaoInvisivelCadeado(c, r, h) end
+		end
 		return alvoKillAuraPlayer ~= nil
 	end
 
-	local char, meuRoot = getCharAndRoot(LocalPlayer)
+	local char, meuRoot, hum = getCharAndRoot(LocalPlayer)
 	if not char or not meuRoot then
 		alvoKillAuraPlayer = nil
 		return false
+	end
+
+	if invisivelAtivo then
+		travarPosicaoInvisivelCadeado(char, meuRoot, hum)
 	end
 
 	local alcanceEfetivo = hitboxAtivo and math.max(DISTANCIA_KILL_AURA, hitboxSize + 6) or (DISTANCIA_KILL_AURA + (invisivelAtivo and 16 or 0))
@@ -2053,6 +2080,9 @@ local function processarKillAuraFrame(agora)
 		pulsoMiraAte = 0
 		yawAntesPulso = nil
 		yawAplicadoNoPulso = nil
+		if invisivelAtivo then
+			travarPosicaoInvisivelCadeado(char, meuRoot, hum)
+		end
 		return false
 	end
 
@@ -2078,11 +2108,21 @@ local function processarKillAuraFrame(agora)
 		dispararPulsoAtaque(char, meuRoot, agora, idx == 1)
 	end
 
+	if invisivelAtivo then
+		travarPosicaoInvisivelCadeado(char, meuRoot, hum)
+	end
+
 	return true
 end
 
 local function processarAutoClickFrame(agora, killAuraAtacouNesteFrame)
-	if killAuraAtacouNesteFrame then return end
+	if killAuraAtacouNesteFrame then
+		if invisivelAtivo then
+			local c, r, h = getCharAndRoot(LocalPlayer)
+			if c and r then travarPosicaoInvisivelCadeado(c, r, h) end
+		end
+		return
+	end
 
 	local estaLigado = ativo
 	if getgenv and getgenv().UniversalTargetLockActive ~= nil then
@@ -2094,10 +2134,13 @@ local function processarAutoClickFrame(agora, killAuraAtacouNesteFrame)
 	local delayCliqueAtual = obterDelayCliqueAtual()
 	if (agora - ultimoDisparoAutoClickTick) < delayCliqueAtual then return end
 
-	local char, meuRoot = getCharAndRoot(LocalPlayer)
+	local char, meuRoot, hum = getCharAndRoot(LocalPlayer)
 	if meuRoot and haAlvoNoAlcanceAutoClick(meuRoot) then
 		ultimoDisparoAutoClickTick = agora
 		dispararPulsoAtaque(char, meuRoot, agora, true)
+		if invisivelAtivo then
+			travarPosicaoInvisivelCadeado(char, meuRoot, hum)
+		end
 	end
 end
 
@@ -3115,6 +3158,15 @@ RunService.RenderStepped:Connect(function(dt)
 	end
 end)
 
+RunService.Stepped:Connect(function()
+	if invisivelAtivo then
+		local c, r, h = getCharAndRoot(LocalPlayer)
+		if c and r then
+			travarPosicaoInvisivelCadeado(c, r, h)
+		end
+	end
+end)
+
 RunService.Heartbeat:Connect(function(dt)
 	local agora = os.clock()
 	aplicarBackCostas()
@@ -3146,4 +3198,4 @@ Players.PlayerRemoving:Connect(function(plr)
 	limparMarcador(plr)
 end)
 
-print("[The VOID Painel] Fio minimo sob o chao (-4.1 studs) + Kill Aura/AutoClick ativos!")
+print("[The VOID Painel] Cadeado ativo em -4.1 studs com Kill Aura e AutoClick!")
