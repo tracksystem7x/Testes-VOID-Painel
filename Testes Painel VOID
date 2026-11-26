@@ -32,22 +32,20 @@ local CFG = {
 	KEY_ESPECIAL = Enum.KeyCode.G,
 	KEY_CANCEL_PVP = Enum.KeyCode.R,
 	JANELA_ESP = 1.2,
-	DIST_MAX = EH_HIGHSCHOOL_RP and 20 or 22,
-	MARGEM_TROCA = 3.5,
+	DIST_MAX = EH_HIGHSCHOOL_RP and 22 or 24,
+	MARGEM_TROCA = 4.0,
 	FIRMEZA_GIRO = 1.0,
 	ORBITAR = false,
 	DIST_COSTAS = 3.2,
 	DIST_MAX_COSTAS = 45,
-	-- Alcance base ajustado para nao pegar gente longe e concentrar no PvP
-	DIST_KA = EH_HIGHSCHOOL_RP and 20 or 22,
-	MARGEM_KA = 4,
-	-- Intervalos calibrados para evitar "ghost swings" por excesso de cliques
-	DELAY_KA_NORM = 0.045,
+	DIST_KA = EH_HIGHSCHOOL_RP and 22 or 24,
+	MARGEM_KA = 6,
+	DELAY_KA_NORM = 0.055,
 	RAJADA_KA_NORM = 1,
-	DELAY_CLK_NORM = 0.04,
-	DELAY_KA_INV = 0.055,
+	DELAY_CLK_NORM = 0.05,
+	DELAY_KA_INV = 0.06,
 	RAJADA_KA_INV = 1,
-	DELAY_CLK_INV = 0.05,
+	DELAY_CLK_INV = 0.055,
 	KA_PULSO = false,
 	DUR_PULSO = 0.015,
 	AUTOCLICK_JUNTO = true,
@@ -61,7 +59,7 @@ local CFG = {
 	MODOS_SPEED = { "CFrame", "WalkSpeed", "AssemblyVel", "Hybrid (CF+WS)" },
 	JUMP_MIN = 1,
 	JUMP_MAX = 1000,
-	HIT_DEF = 20,
+	HIT_DEF = 24,
 	HIT_MAX = 30,
 	HIT_TRANS = 0.965,
 	COR_HIT = Color3.fromRGB(220, 55, 55),
@@ -123,6 +121,10 @@ local S = {
 	backFilt = "",
 	tEsp = 0,
 	tEspSize = 0,
+	espOn = false,
+	espName = true,
+	espHp = true,
+	espBody = true,
 }
 
 local snapInv = { transp = {}, partTransp = {}, size = {}, cm = {}, acc = {}, dec = {}, mesh = {}, roupa = {} }
@@ -1022,11 +1024,11 @@ local function getPvpAlvo(mr)
 	end
 	local dist = (ra.Position - getOrigRef(mr)).Magnitude
 	local mEx = S.hitOn and (S.hitSize * 0.5) or 0
-	return ra, S.alvoPvp, (dist <= (raioHitReg() + mEx + 12) and dist > 0.05)
+	return ra, S.alvoPvp, (dist <= (raioHitReg() + mEx + 14) and dist > 0.05)
 end
 
 local function desviarAmg(mr)
-	if not mr or S.inv or (S.ativo and S.lockOn) or UserInputService:GetFocusedTextBox() then return end
+	if not mr or S.inv or (S.ativo and S.lockOn) or S.kaLockPlr or UserInputService:GetFocusedTextBox() then return end
 	local lp = Vector3.new(mr.CFrame.LookVector.X, 0, mr.CFrame.LookVector.Z)
 	if lp.Magnitude < 0.001 then return end
 	lp = lp.Unit
@@ -1068,12 +1070,6 @@ local function updCacheAlvos(now, mr, rMax)
 	end
 end
 
--- ==========================================
--- HITBOX AURA + CONCENTRACAO NO ALVO PVP:
--- 1) Concentra todos os golpes no alvo travado ate ele morrer, sair ou desligar KA
--- 2) Nao pega em jogadores distantes fora do raio efetivo
--- 3) Respeita o ritmo de ataque para evitar "ghost swings"
--- ==========================================
 local function getRaioEfetivoKa()
 	if S.hitOn then
 		return math.max(CFG.DIST_KA, S.hitSize + 4)
@@ -1081,6 +1077,16 @@ local function getRaioEfetivoKa()
 	return CFG.DIST_KA
 end
 
+local function alvoValidoKa(plr, mr, limMax)
+	if not plr or plr.Parent ~= Players or not elegivel(plr) then return nil end
+	local _, r, h = getCR(plr)
+	if not r or not r.Parent or not h or h.Health <= 0 then return nil end
+	local d = (r.Position - getOrigRef(mr)).Magnitude
+	if d > limMax or d <= 0.05 then return nil end
+	return r, d
+end
+
+-- Trava firme no alvo do PvP ate ele morrer, sair, fugir alem do limite ou o Kill Aura ser desligado
 local function getAlvoKa(mr, rMax, now)
 	if not S.ka or not mr then
 		S.alvoKa, S.kaLockPlr = nil, nil
@@ -1096,20 +1102,15 @@ local function getAlvoKa(mr, rMax, now)
 		return nil, nil
 	end
 
-	local orig = getOrigRef(mr)
 	local limBusca = rMax
-	local limMant = rMax + CFG.MARGEM_KA + 12
+	local limMant = rMax + CFG.MARGEM_KA + 14
 
-	-- Mantem o foco exclusivo no alvo atual ate ele morrer, sair ou o Kill Aura ser desligado
 	local travado = S.kaLockPlr or S.alvoKa
-	if travado and travado.Parent == Players and elegivel(travado) then
-		local _, rt, ht = getCR(travado)
-		if rt and rt.Parent and ht and ht.Health > 0 then
-			local dt = (rt.Position - orig).Magnitude
-			if dt <= limMant and dt > 0.05 then
-				S.alvoKa, S.kaLockPlr = travado, travado
-				return rt, travado
-			end
+	if travado then
+		local rt = alvoValidoKa(travado, mr, limMant)
+		if rt then
+			S.alvoKa, S.kaLockPlr = travado, travado
+			return rt, travado
 		end
 	end
 
@@ -1118,28 +1119,21 @@ local function getAlvoKa(mr, rMax, now)
 
 	local bestR, bestP, bestD = nil, nil, math.huge
 	for _, it in ipairs(S.cacheAlvos) do
-		if it.plr and it.plr.Parent == Players and elegivel(it.plr) and it.root and it.root.Parent and it.hum and it.hum.Health > 0 then
-			local d = (it.root.Position - orig).Magnitude
-			if d <= limBusca and d > 0.05 and d < bestD then
-				bestD = d
-				bestR = it.root
-				bestP = it.plr
-			end
+		local rt, d = alvoValidoKa(it.plr, mr, limBusca)
+		if rt and d < bestD then
+			bestD = d
+			bestR = rt
+			bestP = it.plr
 		end
 	end
 
 	if not bestR then
 		for _, plr in ipairs(Players:GetPlayers()) do
-			if elegivel(plr) then
-				local _, r, h = getCR(plr)
-				if r and r.Parent and h and h.Health > 0 then
-					local d = (r.Position - orig).Magnitude
-					if d <= limBusca and d > 0.05 and d < bestD then
-						bestD = d
-						bestR = r
-						bestP = plr
-					end
-				end
+			local rt, d = alvoValidoKa(plr, mr, limBusca)
+			if rt and d < bestD then
+				bestD = d
+				bestR = rt
+				bestP = plr
 			end
 		end
 	end
@@ -1165,6 +1159,10 @@ end
 
 local function temAlvoClk(mr)
 	if not mr then return false end
+	if S.ka and (S.kaLockPlr or S.alvoKa) then
+		local rt = alvoValidoKa(S.kaLockPlr or S.alvoKa, mr, getRaioEfetivoKa() + CFG.MARGEM_KA + 14)
+		return rt ~= nil
+	end
 	if S.pvpLoop then
 		local rl, _, ok = getPvpAlvo(mr)
 		return (rl ~= nil and ok)
@@ -1173,11 +1171,8 @@ local function temAlvoClk(mr)
 	local raio = getRaioEfetivoKa()
 	for _, plr in ipairs(Players:GetPlayers()) do
 		if elegivel(plr) then
-			local _, r = getCR(plr)
-			if r then
-				local d = (r.Position - orig).Magnitude
-				if d <= raio and d > 0.05 then return true end
-			end
+			local rt = alvoValidoKa(plr, mr, raio)
+			if rt and (rt.Position - orig).Magnitude <= raio then return true end
 		end
 	end
 	return false
@@ -1186,10 +1181,12 @@ end
 local function clkRapido()
 	ignHit = true
 	if typeof(mouse1click) == "function" then
-		mouse1click()
+		pcall(mouse1click)
 	else
-		VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
-		VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+		pcall(function()
+			VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+			VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+		end)
 	end
 	ignHit = false
 end
@@ -1212,37 +1209,37 @@ end
 
 local function procKa(now)
 	if not S.ka or UserInputService:GetFocusedTextBox() then return false end
-	local delay = S.inv and CFG.DELAY_KA_INV or CFG.DELAY_KA_NORM
-	if (now - S.tKa) < delay then
-		if S.inv then local c, r, h = getCR(LocalPlayer); if c and r then travarInv(c, r, h) end end
-		return (S.alvoKa ~= nil or S.kaLockPlr ~= nil)
-	end
 	local ch, mr, h = getCR(LocalPlayer)
 	if not ch or not mr then
 		S.alvoKa, S.kaLockPlr = nil, nil
 		return false
 	end
-	if S.inv then travarInv(ch, mr, h) end
 	local rEf = getRaioEfetivoKa()
 	local alvo, plrAlvo = getAlvoKa(mr, rEf, now)
 	if not alvo or not plrAlvo then
 		pulsoAte, yawAntes, yawPulso = 0, nil, nil
-		if S.inv then travarInv(ch, mr, h) end
 		return false
 	end
-	S.tKa = now
-	-- Orienta suavemente o personagem em direcao ao alvo travado no PvP (fora do modo invisivel)
-	if not S.inv and not CFG.ORBITAR and not UserInputService:GetFocusedTextBox() then
+
+	-- Mantem o personagem virado diretamente para o alvo travado no PvP
+	if not S.inv and not CFG.ORBITAR then
 		local dx, dz = alvo.Position.X - mr.Position.X, alvo.Position.Z - mr.Position.Z
 		if (dx * dx + dz * dz) > 0.01 then
 			local _, ya, _ = mr.CFrame:ToEulerAnglesYXZ()
-			mr.CFrame = CFrame.new(mr.Position) * CFrame.fromEulerAnglesYXZ(0, ya + (normAng(math.atan2(-dx, -dz) - ya) * 0.65), 0)
+			mr.CFrame = CFrame.new(mr.Position) * CFrame.fromEulerAnglesYXZ(0, ya + (normAng(math.atan2(-dx, -dz) - ya) * math.clamp(CFG.FIRMEZA_GIRO, 0.1, 1)), 0)
 		end
 	end
+
+	local delay = S.inv and CFG.DELAY_KA_INV or CFG.DELAY_KA_NORM
+	if (now - S.tKa) < delay then
+		if S.inv then travarInv(ch, mr, h) end
+		return true
+	end
+	S.tKa = now
+
 	local raj = S.inv and CFG.RAJADA_KA_INV or CFG.RAJADA_KA_NORM
 	for i = 1, raj do
-		local _, raChk, haChk = getCR(plrAlvo)
-		if not raChk or not haChk or haChk.Health <= 0 or plrAlvo.Parent ~= Players or not elegivel(plrAlvo) then
+		if not alvoValidoKa(plrAlvo, mr, rEf + CFG.MARGEM_KA + 14) then
 			S.alvoKa, S.kaLockPlr = nil, nil
 			break
 		end
@@ -1862,4 +1859,4 @@ Players.PlayerRemoving:Connect(function(plr)
 	S.limpEspPlr(plr)
 end)
 
-print("[The VOID Painel] Kill Aura focado no PvP + Hitbox Aura atualizado.")
+print("[The VOID Painel] Kill Aura atualizado.")
