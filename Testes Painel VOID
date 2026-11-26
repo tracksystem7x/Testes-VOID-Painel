@@ -204,6 +204,37 @@ local killAuraHudDotUI
 local killAuraHudLabelUI
 local killAuraHudStrokeUI
 
+-- ==========================================
+-- GARANTIA DE NOMES E VIDA DOS OUTROS JOGADORES
+-- ==========================================
+local function restaurarNomesEVidaOutrosJogadores()
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer then
+			local char = plr.Character
+			if char then
+				local hum = char:FindFirstChildOfClass("Humanoid")
+				if hum then
+					pcall(function()
+						if hum.NameDisplayDistance == Enum.HumanoidDisplayDistanceType.None then
+							hum.NameDisplayDistance = Enum.HumanoidDisplayDistanceType.Standard
+						end
+						if hum.HealthDisplayDistance == Enum.HumanoidDisplayDistanceType.None then
+							hum.HealthDisplayDistance = Enum.HumanoidDisplayDistanceType.Standard
+						end
+					end)
+				end
+				for _, desc in ipairs(char:GetDescendants()) do
+					if desc:IsA("BillboardGui") and desc.Name ~= "AMG_Focus_Indicator" then
+						if not desc.Enabled then
+							pcall(function() desc.Enabled = true end)
+						end
+					end
+				end
+			end
+		end
+	end
+end
+
 local function obterDelayKillAuraAtual()
 	return invisivelAtivo and DELAY_KILL_AURA_INVISIVEL or DELAY_KILL_AURA_NORMAL
 end
@@ -978,19 +1009,23 @@ local function aplicarFioTotalInvisivel(char, hum, ativar, aplicarTamanhos)
 			end
 		end
 
-		limparSnapshotsInvisivel()
-
 		if hum then
 			pcall(function()
 				if snapshotDisplayDistHum then
 					hum.NameDisplayDistance = snapshotDisplayDistHum.NameDisplayDistance
 					hum.HealthDisplayDistance = snapshotDisplayDistHum.HealthDisplayDistance
+				else
+					hum.NameDisplayDistance = Enum.HumanoidDisplayDistanceType.Standard
+					hum.HealthDisplayDistance = Enum.HumanoidDisplayDistanceType.Standard
 				end
 				if snapshotDisplayNameHum ~= nil then
 					hum.DisplayName = snapshotDisplayNameHum
 				end
 			end)
 		end
+
+		limparSnapshotsInvisivel()
+		restaurarNomesEVidaOutrosJogadores()
 	end
 end
 
@@ -1179,6 +1214,7 @@ local function setInvisivelEstado(novoEstado)
 		end
 		posSuperficieInvisivel = nil
 		sincronizarCameraInvisivel(hum, nil)
+		restaurarNomesEVidaOutrosJogadores()
 	else
 		if root then
 			posSuperficieInvisivel = root.Position
@@ -1187,6 +1223,7 @@ local function setInvisivelEstado(novoEstado)
 		end
 		aplicarFioTotalInvisivel(char, hum, true, true)
 		atualizarInvisivelSubsolo(0.016, os.clock())
+		restaurarNomesEVidaOutrosJogadores()
 	end
 end
 
@@ -1232,6 +1269,7 @@ local function recuperarEstadoAposQueda(novoChar)
 	limparSnapshotsInvisivel()
 	local humNovo = novoChar and novoChar:FindFirstChildOfClass("Humanoid")
 	sincronizarCameraInvisivel(humNovo, nil)
+	restaurarNomesEVidaOutrosJogadores()
 	janelaRegistroHitAte = 0
 	pulsoMiraAte = 0
 	yawAntesPulso = nil
@@ -1323,7 +1361,8 @@ task.spawn(function()
 				checarTracksHumanoid(hum)
 			end
 		end
-		task.wait(0.2)
+		restaurarNomesEVidaOutrosJogadores()
+		task.wait(0.25)
 	end
 end)
 
@@ -2979,6 +3018,7 @@ end
 criarPainelHitbox()
 atualizarVisual(ativo)
 sincronizarNoAnimation()
+restaurarNomesEVidaOutrosJogadores()
 
 local function distanciaPara(meuRoot, alvoRoot)
 	if not meuRoot or not alvoRoot or not alvoRoot.Parent then
@@ -3152,4 +3192,4 @@ Players.PlayerRemoving:Connect(function(plr)
 	limparMarcador(plr)
 end)
 
-print("[The VOID Painel] Nomes e barras de vida dos outros jogadores preservados!")
+print("[The VOID Painel] Nomes e barras de vida dos outros jogadores preservados com invisivel intacto!")
