@@ -108,6 +108,10 @@ local invisivelAtivo = INVISIVEL_PADRAO_ATIVO
 local cframeSuperficieInvisivel = nil
 local desyncSubsoloAplicado = false
 local snapshotTransparenciaInvisivel = {}
+local cameraYawLivre = nil
+local cameraPitchLivre = nil
+local cameraDistanciaLivre = 10
+local cameraTipoAnteriorSalvo = nil
 local hudLosangoVisivel = HUD_LOSANGO_PADRAO_VISIVEL
 local hudStatsVisivel = HUD_STATS_PADRAO_VISIVEL
 local speedCFrameAtivo = SPEED_CFRAME_PADRAO_ATIVO
@@ -588,7 +592,7 @@ local function sincronizarNoAnimation()
 end
 
 -- ==========================================
--- INVISIVEL (UNDERGROUND DESYNC PARA OUTROS PLAYERS)
+-- INVISIVEL (UNDERGROUND DESYNC + CAMERA LIVRE NA SUPERFICIE)
 -- ==========================================
 local function aplicarVisualFantasmaLocal(char, ativar)
 	if not char then return end
@@ -615,6 +619,63 @@ local function aplicarVisualFantasmaLocal(char, ativar)
 	end
 end
 
+local function restaurarCameraNormalInvisivel()
+	local cam = workspace.CurrentCamera
+	if cam then
+		pcall(function()
+			if cameraTipoAnteriorSalvo then
+				cam.CameraType = cameraTipoAnteriorSalvo
+			else
+				cam.CameraType = Enum.CameraType.Custom
+			end
+			local char = LocalPlayer.Character
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+			if hum then
+				cam.CameraSubject = hum
+			end
+		end)
+	end
+	cameraTipoAnteriorSalvo = nil
+	cameraYawLivre = nil
+	cameraPitchLivre = nil
+end
+
+local function iniciarCameraLivreSuperficie(cfSuperficie)
+	local cam = workspace.CurrentCamera
+	if not cam or not cfSuperficie then return end
+	if cameraTipoAnteriorSalvo == nil then
+		cameraTipoAnteriorSalvo = cam.CameraType
+	end
+	local look = cam.CFrame.LookVector
+	cameraYawLivre = math.atan2(-look.X, -look.Z)
+	cameraPitchLivre = math.asin(math.clamp(look.Y, -0.92, 0.92))
+	local distAtual = (cam.CFrame.Position - cfSuperficie.Position).Magnitude
+	cameraDistanciaLivre = math.clamp(distAtual, 4, 24)
+	pcall(function()
+		cam.CameraType = Enum.CameraType.Scriptable
+	end)
+end
+
+local function atualizarCameraLivreSuperficie()
+	if not invisivelAtivo or not cframeSuperficieInvisivel then return end
+	local cam = workspace.CurrentCamera
+	if not cam then return end
+
+	if cameraYawLivre == nil or cameraPitchLivre == nil then
+		iniciarCameraLivreSuperficie(cframeSuperficieInvisivel)
+	end
+
+	pcall(function()
+		if cam.CameraType ~= Enum.CameraType.Scriptable then
+			cam.CameraType = Enum.CameraType.Scriptable
+		end
+		local focoSuperficie = cframeSuperficieInvisivel.Position + Vector3.new(0, 1.8, 0)
+		local rotCam = CFrame.fromOrientation(cameraPitchLivre, cameraYawLivre, 0)
+		local posCam = focoSuperficie - (rotCam.LookVector * cameraDistanciaLivre)
+		cam.CFrame = CFrame.lookAt(posCam, focoSuperficie)
+	end)
+end
+
 local function restaurarSuperficieAntesDoRender()
 	local char = LocalPlayer.Character
 	local root = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
@@ -624,8 +685,11 @@ local function restaurarSuperficieAntesDoRender()
 		end)
 		desyncSubsoloAplicado = false
 	end
-	if invisivelAtivo and char then
-		aplicarVisualFantasmaLocal(char, true)
+	if invisivelAtivo then
+		if char then
+			aplicarVisualFantasmaLocal(char, true)
+		end
+		atualizarCameraLivreSuperficie()
 	end
 end
 
@@ -645,6 +709,10 @@ local function aplicarInvisivelDesyncHeartbeat()
 	if not root then return end
 
 	cframeSuperficieInvisivel = root.CFrame
+	if cameraYawLivre == nil or cameraPitchLivre == nil then
+		iniciarCameraLivreSuperficie(cframeSuperficieInvisivel)
+	end
+
 	local alturaLimiteVoid = workspace.FallenPartsDestroyHeight + 25
 	local ySubsolo = math.max(cframeSuperficieInvisivel.Position.Y - INVISIVEL_PROFUNDIDADE, alturaLimiteVoid)
 	local posSubsolo = Vector3.new(cframeSuperficieInvisivel.Position.X, ySubsolo, cframeSuperficieInvisivel.Position.Z)
@@ -663,10 +731,35 @@ local function setInvisivelEstado(novoEstado)
 		restaurarSuperficieAntesDoRender()
 		cframeSuperficieInvisivel = nil
 		aplicarVisualFantasmaLocal(LocalPlayer.Character, false)
+		restaurarCameraNormalInvisivel()
 	else
-		aplicarVisualFantasmaLocal(LocalPlayer.Character, true)
+		local char = LocalPlayer.Character
+		local root = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
+		if root then
+			cframeSuperficieInvisivel = root.CFrame
+			iniciarCameraLivreSuperficie(cframeSuperficieInvisivel)
+		end
+		aplicarVisualFantasmaLocal(char, true)
 	end
 end
+
+UserInputService.InputChanged:Connect(function(input, gameProcessed)
+	if not invisivelAtivo then return end
+	if UserInputService:GetFocusedTextBox() then return end
+
+	if input.UserInputType == Enum.UserInputType.MouseMovement then
+		local rotacaoAtiva = (UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter)
+			or UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+			or (not gameProcessed)
+		if rotacaoAtiva and cameraYawLivre ~= nil and cameraPitchLivre ~= nil then
+			local sens = 0.0045
+			cameraYawLivre -= input.Delta.X * sens
+			cameraPitchLivre = math.clamp(cameraPitchLivre - (input.Delta.Y * sens), -1.35, 1.35)
+		end
+	elseif input.UserInputType == Enum.UserInputType.MouseWheel and not gameProcessed then
+		cameraDistanciaLivre = math.clamp(cameraDistanciaLivre - (input.Position.Z * 1.5), 4, 24)
+	end
+end)
 
 -- ==========================================
 -- DEATH TP (SALVA POSICAO DA MORTE E VOLTA AO RENASCER)
@@ -707,6 +800,7 @@ local function recuperarEstadoAposQueda(novoChar)
 	cframeSuperficieInvisivel = nil
 	desyncSubsoloAplicado = false
 	table.clear(snapshotTransparenciaInvisivel)
+	restaurarCameraNormalInvisivel()
 	janelaRegistroHitAte = 0
 	pulsoMiraAte = 0
 	yawAntesPulso = nil
