@@ -88,7 +88,7 @@ local FIGHTING_PADRAO_ATIVO = false
 local NO_ANIMATION_PADRAO_ATIVO = false
 local INVISIVEL_PADRAO_ATIVO = false
 
--- Abaixo do piso da quadra e corredor para ficar oculto de verdade (4.1 studs)
+-- Abaixo do piso da quadra e corredor para ficar oculto de verdade (4.15 studs)
 local INVISIVEL_PROFUNDIDADE = 4.15
 local COR_PISO_QUADRA = Color3.fromRGB(196, 154, 108)
 
@@ -149,9 +149,6 @@ local snapshotAcessoriosInvisivel = {}
 local snapshotDecalsInvisivel = {}
 local snapshotMeshesInvisivel = {}
 local snapshotRoupasInvisivel = {}
-local snapshotGuisInvisivel = {}
-local snapshotDisplayDistHum = nil
-local snapshotDisplayNameHum = nil
 
 local partesPersonagemCache = {}
 local ultimoCacheChar = nil
@@ -186,8 +183,6 @@ local backFilterTexto = ""
 local originaisRoot = {}
 local ultimoEstadoAplicado = {}
 local marcadoresJogadores = {}
-local nametagsJogadores = {}
-local ultimoSyncNametagTick = 0
 local animConexoes = {}
 local ultimoEspecialTick = 0
 local ultimoToggleKillAura = 0
@@ -201,6 +196,7 @@ local ignorarProximoDisparoHit = false
 
 local btnKillAuraUI
 local btnAutoClickUI
+local btnInvisivelUI
 local killAuraHudFrameUI
 local killAuraHudDotUI
 local killAuraHudLabelUI
@@ -220,88 +216,10 @@ end
 
 local parentGui = getGuiParent()
 
--- ==========================================
--- NAMETAG LEVE PARA OUTROS JOGADORES (INVISIVEL ON E OFF)
--- ==========================================
-local function limparNametagJogador(plr)
-	local tag = nametagsJogadores[plr]
-	if tag then
-		pcall(function() tag:Destroy() end)
-		nametagsJogadores[plr] = nil
-	end
-end
-
-local function garantirNametagJogador(plr, char, root)
-	if not parentGui or not plr or plr == LocalPlayer or not char or not root then
-		return
-	end
-	local adorneePart = char:FindFirstChild("Head") or root
-	local tag = nametagsJogadores[plr]
-	if tag and tag.Parent then
-		if tag.Adornee ~= adorneePart then
-			tag.Adornee = adorneePart
-		end
-		tag.Enabled = true
-		return
-	end
-	limparNametagJogador(plr)
-
-	local gui = Instance.new("BillboardGui")
-	gui.Name = "VoidPlayerNameTag"
-	gui.Adornee = adorneePart
-	gui.Size = UDim2.new(0, 160, 0, 22)
-	gui.StudsOffset = Vector3.new(0, 2.3, 0)
-	gui.AlwaysOnTop = true
-	gui.MaxDistance = 250
-	gui.Enabled = true
-	gui.Parent = parentGui
-
-	local lbl = Instance.new("TextLabel")
-	lbl.Size = UDim2.new(1, 0, 1, 0)
-	lbl.BackgroundTransparency = 1
-	local nomeExibir = (plr.DisplayName and plr.DisplayName ~= "" and plr.DisplayName ~= plr.Name)
-		and (plr.DisplayName .. " (@" .. plr.Name .. ")")
-		or plr.Name
-	lbl.Text = nomeExibir
-	lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
-	lbl.TextStrokeColor3 = Color3.fromRGB(15, 15, 20)
-	lbl.TextStrokeTransparency = 0.2
-	lbl.Font = Enum.Font.GothamBold
-	lbl.TextSize = 12
-	lbl.Parent = gui
-
-	nametagsJogadores[plr] = gui
-end
-
-local function sincronizarNametagsOutrosJogadores(agora)
-	local now = agora or os.clock()
-	if (now - ultimoSyncNametagTick) < 0.35 then
-		return
-	end
-	ultimoSyncNametagTick = now
-
-	for _, plr in ipairs(Players:GetPlayers()) do
-		if plr ~= LocalPlayer then
-			local char = plr.Character
-			local hum = char and char:FindFirstChildOfClass("Humanoid")
-			local root = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
-			if char and hum and hum.Health > 0 and root then
-				if hum.NameDisplayDistance ~= Enum.HumanoidDisplayDistanceType.Standard then
-					pcall(function()
-						hum.NameDisplayDistance = Enum.HumanoidDisplayDistanceType.Standard
-					end)
-				end
-				garantirNametagJogador(plr, char, root)
-			else
-				limparNametagJogador(plr)
-			end
-		end
-	end
-
-	for plr in pairs(nametagsJogadores) do
-		if plr.Parent ~= Players then
-			limparNametagJogador(plr)
-		end
+local function atualizarInvisivelUI(ligado)
+	if btnInvisivelUI then
+		btnInvisivelUI.Text = ligado and "Invisivel: ON" or "Invisivel: OFF"
+		btnInvisivelUI.BackgroundColor3 = ligado and BOTAO_ROXO_ON or BOTAO_CINZA
 	end
 end
 
@@ -817,7 +735,7 @@ local function sincronizarNoAnimation()
 end
 
 -- ==========================================
--- INVISIVEL (FIO REAL ABAIXO DO CHAO + CADEADO EM -4.1)
+-- INVISIVEL (FIO REAL ABAIXO DO CHAO + CADEADO EM -4.15)
 -- ==========================================
 local function obterCachePartesPersonagem(char)
 	if not char then return {} end
@@ -835,8 +753,7 @@ local function obterCachePartesPersonagem(char)
 			or desc:IsA("Shirt")
 			or desc:IsA("Pants")
 			or desc:IsA("ShirtGraphic")
-			or desc:IsA("CharacterMesh")
-			or desc:IsA("BillboardGui") then
+			or desc:IsA("CharacterMesh") then
 			table.insert(partesPersonagemCache, desc)
 		end
 	end
@@ -880,37 +797,13 @@ local function limparSnapshotsInvisivel()
 	table.clear(snapshotDecalsInvisivel)
 	table.clear(snapshotMeshesInvisivel)
 	table.clear(snapshotRoupasInvisivel)
-	table.clear(snapshotGuisInvisivel)
-	snapshotDisplayDistHum = nil
-	snapshotDisplayNameHum = nil
 end
 
-local function aplicarFioTotalInvisivel(char, hum, ativar, aplicarTamanhos)
+local function aplicarFioTotalInvisivel(char, ativar, aplicarTamanhos)
 	if not char then return end
 	local itens = obterCachePartesPersonagem(char)
 
 	if ativar then
-		if hum then
-			if snapshotDisplayDistHum == nil then
-				pcall(function()
-					snapshotDisplayDistHum = {
-						NameDisplayDistance = hum.NameDisplayDistance,
-						HealthDisplayDistance = hum.HealthDisplayDistance
-					}
-				end)
-			end
-			if snapshotDisplayNameHum == nil then
-				pcall(function()
-					snapshotDisplayNameHum = hum.DisplayName
-				end)
-			end
-			pcall(function()
-				hum.NameDisplayDistance = Enum.HumanoidDisplayDistanceType.None
-				hum.HealthDisplayDistance = Enum.HumanoidDisplayDistanceType.None
-				hum.DisplayName = ""
-			end)
-		end
-
 		for _, desc in ipairs(itens) do
 			if desc.Parent then
 				if desc:IsA("Accessory") then
@@ -989,13 +882,6 @@ local function aplicarFioTotalInvisivel(char, hum, ativar, aplicarTamanhos)
 					if desc.Parent ~= nil then
 						pcall(function() desc.Parent = nil end)
 					end
-				elseif desc:IsA("BillboardGui") then
-					if snapshotGuisInvisivel[desc] == nil then
-						snapshotGuisInvisivel[desc] = desc.Enabled
-					end
-					if desc.Enabled then
-						pcall(function() desc.Enabled = false end)
-					end
 				end
 			end
 		end
@@ -1056,28 +942,6 @@ local function aplicarFioTotalInvisivel(char, hum, ativar, aplicarTamanhos)
 					inst.Parent = info.template
 				end)
 			end
-		end
-		for gui, origEnabled in pairs(snapshotGuisInvisivel) do
-			if gui and gui.Parent then
-				pcall(function()
-					gui.Enabled = origEnabled
-				end)
-			end
-		end
-
-		if hum then
-			pcall(function()
-				if snapshotDisplayDistHum then
-					hum.NameDisplayDistance = snapshotDisplayDistHum.NameDisplayDistance
-					hum.HealthDisplayDistance = snapshotDisplayDistHum.HealthDisplayDistance
-				else
-					hum.NameDisplayDistance = Enum.HumanoidDisplayDistanceType.Standard
-					hum.HealthDisplayDistance = Enum.HumanoidDisplayDistanceType.Standard
-				end
-				if snapshotDisplayNameHum ~= nil then
-					hum.DisplayName = snapshotDisplayNameHum
-				end
-			end)
 		end
 
 		limparSnapshotsInvisivel()
@@ -1153,7 +1017,7 @@ end
 
 local ultimoSyncTamanhoInvisivel = 0
 
--- CADEADO MESTRE DE POSICAO EM -4.1 (sem subida ao usar Kill Aura / AutoClick)
+-- CADEADO MESTRE DE POSICAO EM -4.15 (sem subida ao usar Kill Aura / AutoClick)
 local function travarPosicaoInvisivelCadeado(char, root, hum)
 	if not invisivelAtivo or not posSuperficieInvisivel or not root or not root.Parent then
 		return
@@ -1235,12 +1099,13 @@ local function atualizarInvisivelSubsolo(dt, agora)
 	if aplicarTamanhos then
 		ultimoSyncTamanhoInvisivel = now
 	end
-	aplicarFioTotalInvisivel(char, hum, true, aplicarTamanhos)
+	aplicarFioTotalInvisivel(char, true, aplicarTamanhos)
 	sincronizarCameraInvisivel(hum, posSuperficieInvisivel)
 end
 
 local function setInvisivelEstado(novoEstado)
-	invisivelAtivo = novoEstado
+	invisivelAtivo = not not novoEstado
+	atualizarInvisivelUI(invisivelAtivo)
 	ultimoCacheChar = nil
 	ultimoSyncTamanhoInvisivel = 0
 	ultimoDisparoKillAuraTick = 0
@@ -1251,7 +1116,7 @@ local function setInvisivelEstado(novoEstado)
 
 	if not invisivelAtivo then
 		destruirAncoraCamera()
-		aplicarFioTotalInvisivel(char, hum, false, false)
+		aplicarFioTotalInvisivel(char, false, false)
 		if root and posSuperficieInvisivel then
 			local cfVolta = CFrame.new(posSuperficieInvisivel.X, posSuperficieInvisivel.Y + 1.2, posSuperficieInvisivel.Z)
 				* CFrame.fromEulerAnglesYXZ(0, yawSuperficieInvisivel, 0)
@@ -1275,11 +1140,9 @@ local function setInvisivelEstado(novoEstado)
 			local _, yawAtual, _ = root.CFrame:ToEulerAnglesYXZ()
 			yawSuperficieInvisivel = yawAtual
 		end
-		aplicarFioTotalInvisivel(char, hum, true, true)
+		aplicarFioTotalInvisivel(char, true, true)
 		atualizarInvisivelSubsolo(0.016, os.clock())
 	end
-	ultimoSyncNametagTick = 0
-	sincronizarNametagsOutrosJogadores(os.clock())
 end
 
 -- ==========================================
@@ -1324,8 +1187,6 @@ local function recuperarEstadoAposQueda(novoChar)
 	limparSnapshotsInvisivel()
 	local humNovo = novoChar and novoChar:FindFirstChildOfClass("Humanoid")
 	sincronizarCameraInvisivel(humNovo, nil)
-	ultimoSyncNametagTick = 0
-	sincronizarNametagsOutrosJogadores(os.clock())
 	janelaRegistroHitAte = 0
 	pulsoMiraAte = 0
 	yawAntesPulso = nil
@@ -1335,6 +1196,7 @@ local function recuperarEstadoAposQueda(novoChar)
 
 	atualizarVisual(ativo)
 	atualizarKillAuraUI(killAuraAtivo)
+	atualizarInvisivelUI(invisivelAtivo)
 
 	task.spawn(function()
 		local hum = novoChar:FindFirstChildOfClass("Humanoid") or novoChar:WaitForChild("Humanoid", 5)
@@ -1417,7 +1279,6 @@ task.spawn(function()
 				checarTracksHumanoid(hum)
 			end
 		end
-		sincronizarNametagsOutrosJogadores(os.clock())
 		task.wait(0.4)
 	end
 end)
@@ -3050,8 +2911,6 @@ local function criarPainelHitbox()
 
 	btnInvisivel.MouseButton1Click:Connect(function()
 		setInvisivelEstado(not invisivelAtivo)
-		btnInvisivel.Text = invisivelAtivo and "Invisivel: ON" or "Invisivel: OFF"
-		btnInvisivel.BackgroundColor3 = invisivelAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
 	end)
 
 	btnOtimizar.MouseButton1Click:Connect(function()
@@ -3068,13 +2927,14 @@ local function criarPainelHitbox()
 	painelFrameUI = frame
 	btnAutoClickUI = btnAuto
 	btnKillAuraUI = btnKillAura
+	btnInvisivelUI = btnInvisivel
 	atualizarKillAuraUI(killAuraAtivo)
+	atualizarInvisivelUI(invisivelAtivo)
 end
 
 criarPainelHitbox()
 atualizarVisual(ativo)
 sincronizarNoAnimation()
-sincronizarNametagsOutrosJogadores(os.clock())
 
 local function distanciaPara(meuRoot, alvoRoot)
 	if not meuRoot or not alvoRoot or not alvoRoot.Parent then
@@ -3229,7 +3089,6 @@ RunService.Heartbeat:Connect(function(dt)
 	local killAuraAtacou = processarKillAuraFrame(agora)
 	processarAutoClickFrame(agora, killAuraAtacou)
 	atualizarInvisivelSubsolo(dt, agora)
-	sincronizarNametagsOutrosJogadores(agora)
 end)
 
 task.spawn(function()
@@ -3247,7 +3106,6 @@ Players.PlayerRemoving:Connect(function(plr)
 		alvoPvpLoopPlayer = nil
 	end
 	limparMarcador(plr)
-	limparNametagJogador(plr)
 end)
 
-print("[The VOID Painel] FPS otimizado e nametags dos outros jogadores ativos com Invisivel ON e OFF!")
+print("[The VOID Painel] Codigo base pronto: nomes/vida intactos e botao Invisivel atualizado.")
