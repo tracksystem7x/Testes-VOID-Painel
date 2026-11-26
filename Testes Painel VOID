@@ -58,6 +58,8 @@ local DEATH_TP_PADRAO_ATIVO = false
 local NO_SLOW_PADRAO_ATIVO = false
 local KILL_AURA_PADRAO_ATIVO = false
 local NO_ANIMATION_PADRAO_ATIVO = false
+local INVISIVEL_PADRAO_ATIVO = false
+local INVISIVEL_PROFUNDIDADE = 10
 local HUD_LOSANGO_PADRAO_VISIVEL = true
 local HUD_STATS_PADRAO_VISIVEL = true
 local SPEED_CFRAME_PADRAO_ATIVO = false
@@ -102,6 +104,10 @@ local deathTpAtivo = DEATH_TP_PADRAO_ATIVO
 local noSlowAtivo = NO_SLOW_PADRAO_ATIVO
 local killAuraAtivo = KILL_AURA_PADRAO_ATIVO
 local noAnimationAtivo = NO_ANIMATION_PADRAO_ATIVO
+local invisivelAtivo = INVISIVEL_PADRAO_ATIVO
+local cframeSuperficieInvisivel = nil
+local desyncSubsoloAplicado = false
+local snapshotTransparenciaInvisivel = {}
 local hudLosangoVisivel = HUD_LOSANGO_PADRAO_VISIVEL
 local hudStatsVisivel = HUD_STATS_PADRAO_VISIVEL
 local speedCFrameAtivo = SPEED_CFRAME_PADRAO_ATIVO
@@ -582,6 +588,87 @@ local function sincronizarNoAnimation()
 end
 
 -- ==========================================
+-- INVISIVEL (UNDERGROUND DESYNC PARA OUTROS PLAYERS)
+-- ==========================================
+local function aplicarVisualFantasmaLocal(char, ativar)
+	if not char then return end
+	if ativar then
+		for _, desc in ipairs(char:GetDescendants()) do
+			if desc:IsA("BasePart") and desc.Name ~= "HumanoidRootPart" then
+				if snapshotTransparenciaInvisivel[desc] == nil then
+					snapshotTransparenciaInvisivel[desc] = desc.LocalTransparencyModifier
+				end
+				pcall(function()
+					desc.LocalTransparencyModifier = math.max(desc.LocalTransparencyModifier, 0.45)
+				end)
+			end
+		end
+	else
+		for part, origVal in pairs(snapshotTransparenciaInvisivel) do
+			if part and part.Parent then
+				pcall(function()
+					part.LocalTransparencyModifier = origVal
+				end)
+			end
+		end
+		table.clear(snapshotTransparenciaInvisivel)
+	end
+end
+
+local function restaurarSuperficieAntesDoRender()
+	local char = LocalPlayer.Character
+	local root = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
+	if desyncSubsoloAplicado and root and cframeSuperficieInvisivel then
+		pcall(function()
+			root.CFrame = cframeSuperficieInvisivel
+		end)
+		desyncSubsoloAplicado = false
+	end
+	if invisivelAtivo and char then
+		aplicarVisualFantasmaLocal(char, true)
+	end
+end
+
+local function aplicarInvisivelDesyncHeartbeat()
+	if not invisivelAtivo then
+		if desyncSubsoloAplicado then
+			restaurarSuperficieAntesDoRender()
+		end
+		return
+	end
+
+	local char = LocalPlayer.Character
+	if not char then return end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if hum and hum.Health <= 0 then return end
+	local root = char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
+	if not root then return end
+
+	cframeSuperficieInvisivel = root.CFrame
+	local alturaLimiteVoid = workspace.FallenPartsDestroyHeight + 25
+	local ySubsolo = math.max(cframeSuperficieInvisivel.Position.Y - INVISIVEL_PROFUNDIDADE, alturaLimiteVoid)
+	local posSubsolo = Vector3.new(cframeSuperficieInvisivel.Position.X, ySubsolo, cframeSuperficieInvisivel.Position.Z)
+	local rotacaoAtual = cframeSuperficieInvisivel - cframeSuperficieInvisivel.Position
+
+	pcall(function()
+		root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, 0, root.AssemblyLinearVelocity.Z)
+		root.CFrame = CFrame.new(posSubsolo) * rotacaoAtual
+	end)
+	desyncSubsoloAplicado = true
+end
+
+local function setInvisivelEstado(novoEstado)
+	invisivelAtivo = novoEstado
+	if not invisivelAtivo then
+		restaurarSuperficieAntesDoRender()
+		cframeSuperficieInvisivel = nil
+		aplicarVisualFantasmaLocal(LocalPlayer.Character, false)
+	else
+		aplicarVisualFantasmaLocal(LocalPlayer.Character, true)
+	end
+end
+
+-- ==========================================
 -- DEATH TP (SALVA POSICAO DA MORTE E VOLTA AO RENASCER)
 -- ==========================================
 local function registrarMorteSeNecessario(char)
@@ -590,7 +677,8 @@ local function registrarMorteSeNecessario(char)
 	if not targetChar then return end
 	local root = targetChar:FindFirstChild("HumanoidRootPart") or targetChar.PrimaryPart
 	if root then
-		ultimaPosicaoMorte = root.CFrame + Vector3.new(0, 3, 0)
+		local cfSalvar = (invisivelAtivo and cframeSuperficieInvisivel) or root.CFrame
+		ultimaPosicaoMorte = cfSalvar + Vector3.new(0, 3, 0)
 		morteRegistradaNestaVida = true
 	end
 end
@@ -616,6 +704,9 @@ local function recuperarEstadoAposQueda(novoChar)
 	alvoAtual = nil
 	alvoPvpLoopPlayer = nil
 	alvoKillAuraPlayer = nil
+	cframeSuperficieInvisivel = nil
+	desyncSubsoloAplicado = false
+	table.clear(snapshotTransparenciaInvisivel)
 	janelaRegistroHitAte = 0
 	pulsoMiraAte = 0
 	yawAntesPulso = nil
@@ -2052,9 +2143,18 @@ local function criarPainelHitbox()
 	)
 	btnHudStats.BackgroundColor3 = hudStatsVisivel and BOTAO_ROXO_ON or BOTAO_CINZA
 
+	local btnInvisivel = criarBotaoPadrao(
+		pagVisual,
+		invisivelAtivo and "Invisivel: ON" or "Invisivel: OFF",
+		UDim2.new(0, 8, 0, 97),
+		UDim2.new(1, -16, 0, 25),
+		11
+	)
+	btnInvisivel.BackgroundColor3 = invisivelAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
+
 	local dicaVisual = Instance.new("TextLabel")
 	dicaVisual.Size = UDim2.new(1, -16, 0, 44)
-	dicaVisual.Position = UDim2.new(0, 8, 0, 99)
+	dicaVisual.Position = UDim2.new(0, 8, 0, 130)
 	dicaVisual.BackgroundTransparency = 1
 	dicaVisual.Text = "No Animation corta soco/G. FPS/MS aparece embaixo do losango."
 	dicaVisual.TextColor3 = Color3.fromRGB(165, 165, 180)
@@ -2270,6 +2370,12 @@ local function criarPainelHitbox()
 		end
 	end)
 
+	btnInvisivel.MouseButton1Click:Connect(function()
+		setInvisivelEstado(not invisivelAtivo)
+		btnInvisivel.Text = invisivelAtivo and "Invisivel: ON" or "Invisivel: OFF"
+		btnInvisivel.BackgroundColor3 = invisivelAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
+	end)
+
 	btnOtimizar.MouseButton1Click:Connect(function()
 		aplicarOtimizacaoFpsERede(not boostFpsRedeAtivo)
 		btnOtimizar.Text = boostFpsRedeAtivo and "Otimizar FPS / Rede: ON" or "Otimizar FPS / Rede: OFF"
@@ -2395,6 +2501,7 @@ local ultimoFpsExibido = nil
 local ultimoPingExibido = nil
 
 RunService.RenderStepped:Connect(function(dt)
+	restaurarSuperficieAntesDoRender()
 	if pvpFocusLoopAtivo and not alvoPvpLoopPlayer and os.clock() <= janelaRegistroHitAte then
 		registrarAlvoPvpPorHit()
 	end
@@ -2421,6 +2528,7 @@ end)
 
 RunService.Heartbeat:Connect(function(dt)
 	local agora = os.clock()
+	restaurarSuperficieAntesDoRender()
 	aplicarBackCostas()
 	aplicarNoSlow()
 	aplicarJumpMultiplicador()
@@ -2430,6 +2538,7 @@ RunService.Heartbeat:Connect(function(dt)
 
 	local killAuraAtacou = processarKillAuraFrame(agora)
 	processarAutoClickFrame(agora, killAuraAtacou)
+	aplicarInvisivelDesyncHeartbeat()
 end)
 
 task.spawn(function()
