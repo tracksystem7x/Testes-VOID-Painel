@@ -89,7 +89,7 @@ local NO_ANIMATION_PADRAO_ATIVO = false
 local INVISIVEL_PADRAO_ATIVO = false
 
 -- Abaixo do piso da quadra e corredor para ficar oculto de verdade (4.1 studs)
-local INVISIVEL_PROFUNDIDADE = 4.2
+local INVISIVEL_PROFUNDIDADE = 4.12
 local COR_PISO_QUADRA = Color3.fromRGB(196, 154, 108)
 
 local HUD_LOSANGO_PADRAO_VISIVEL = true
@@ -186,6 +186,8 @@ local backFilterTexto = ""
 local originaisRoot = {}
 local ultimoEstadoAplicado = {}
 local marcadoresJogadores = {}
+local nametagsJogadores = {}
+local ultimoSyncNametagTick = 0
 local animConexoes = {}
 local ultimoEspecialTick = 0
 local ultimoToggleKillAura = 0
@@ -204,34 +206,101 @@ local killAuraHudDotUI
 local killAuraHudLabelUI
 local killAuraHudStrokeUI
 
+local function getGuiParent()
+	local ok, res = pcall(function()
+		local test = Instance.new("ScreenGui")
+		test.Name = "LockGuiTest"
+		test.Parent = CoreGui
+		test:Destroy()
+		return CoreGui
+	end)
+	if ok and res then return res end
+	return LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
+end
+
+local parentGui = getGuiParent()
+
 -- ==========================================
--- GARANTIA CONTINUA DE NOMES E VIDA DOS OUTROS JOGADORES
--- (ATIVO TANTO COM INVISIVEL ON QUANTO OFF)
+-- NAMETAG LEVE PARA OUTROS JOGADORES (INVISIVEL ON E OFF)
 -- ==========================================
-local function restaurarNomesEVidaOutrosJogadores()
+local function limparNametagJogador(plr)
+	local tag = nametagsJogadores[plr]
+	if tag then
+		pcall(function() tag:Destroy() end)
+		nametagsJogadores[plr] = nil
+	end
+end
+
+local function garantirNametagJogador(plr, char, root)
+	if not parentGui or not plr or plr == LocalPlayer or not char or not root then
+		return
+	end
+	local adorneePart = char:FindFirstChild("Head") or root
+	local tag = nametagsJogadores[plr]
+	if tag and tag.Parent then
+		if tag.Adornee ~= adorneePart then
+			tag.Adornee = adorneePart
+		end
+		tag.Enabled = true
+		return
+	end
+	limparNametagJogador(plr)
+
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "VoidPlayerNameTag"
+	gui.Adornee = adorneePart
+	gui.Size = UDim2.new(0, 160, 0, 22)
+	gui.StudsOffset = Vector3.new(0, 2.3, 0)
+	gui.AlwaysOnTop = true
+	gui.MaxDistance = 250
+	gui.Enabled = true
+	gui.Parent = parentGui
+
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, 0, 1, 0)
+	lbl.BackgroundTransparency = 1
+	local nomeExibir = (plr.DisplayName and plr.DisplayName ~= "" and plr.DisplayName ~= plr.Name)
+		and (plr.DisplayName .. " (@" .. plr.Name .. ")")
+		or plr.Name
+	lbl.Text = nomeExibir
+	lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+	lbl.TextStrokeColor3 = Color3.fromRGB(15, 15, 20)
+	lbl.TextStrokeTransparency = 0.2
+	lbl.Font = Enum.Font.GothamBold
+	lbl.TextSize = 12
+	lbl.Parent = gui
+
+	nametagsJogadores[plr] = gui
+end
+
+local function sincronizarNametagsOutrosJogadores(agora)
+	local now = agora or os.clock()
+	if (now - ultimoSyncNametagTick) < 0.35 then
+		return
+	end
+	ultimoSyncNametagTick = now
+
 	for _, plr in ipairs(Players:GetPlayers()) do
 		if plr ~= LocalPlayer then
 			local char = plr.Character
-			if char then
-				local hum = char:FindFirstChildOfClass("Humanoid")
-				if hum then
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+			local root = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
+			if char and hum and hum.Health > 0 and root then
+				if hum.NameDisplayDistance ~= Enum.HumanoidDisplayDistanceType.Standard then
 					pcall(function()
-						if hum.NameDisplayDistance ~= Enum.HumanoidDisplayDistanceType.Standard then
-							hum.NameDisplayDistance = Enum.HumanoidDisplayDistanceType.Standard
-						end
-						if hum.HealthDisplayDistance ~= Enum.HumanoidDisplayDistanceType.Standard then
-							hum.HealthDisplayDistance = Enum.HumanoidDisplayDistanceType.Standard
-						end
+						hum.NameDisplayDistance = Enum.HumanoidDisplayDistanceType.Standard
 					end)
 				end
-				for _, desc in ipairs(char:GetDescendants()) do
-					if desc:IsA("BillboardGui") and desc.Name ~= "AMG_Focus_Indicator" then
-						if not desc.Enabled then
-							pcall(function() desc.Enabled = true end)
-						end
-					end
-				end
+				garantirNametagJogador(plr, char, root)
+			else
+				limparNametagJogador(plr)
 			end
+		end
+	end
+
+	for plr in pairs(nametagsJogadores) do
+		if plr.Parent ~= Players then
+			limparNametagJogador(plr)
 		end
 	end
 end
@@ -445,20 +514,6 @@ local function aplicarOtimizacaoFpsERede(ativar)
 		end
 	end
 end
-
-local function getGuiParent()
-	local ok, res = pcall(function()
-		local test = Instance.new("ScreenGui")
-		test.Name = "LockGuiTest"
-		test.Parent = CoreGui
-		test:Destroy()
-		return CoreGui
-	end)
-	if ok and res then return res end
-	return LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
-end
-
-local parentGui = getGuiParent()
 
 local losangoGuiRoot, losangoUI, statusUI, statsLabelUI
 
@@ -1182,7 +1237,6 @@ local function atualizarInvisivelSubsolo(dt, agora)
 	end
 	aplicarFioTotalInvisivel(char, hum, true, aplicarTamanhos)
 	sincronizarCameraInvisivel(hum, posSuperficieInvisivel)
-	restaurarNomesEVidaOutrosJogadores()
 end
 
 local function setInvisivelEstado(novoEstado)
@@ -1224,7 +1278,8 @@ local function setInvisivelEstado(novoEstado)
 		aplicarFioTotalInvisivel(char, hum, true, true)
 		atualizarInvisivelSubsolo(0.016, os.clock())
 	end
-	restaurarNomesEVidaOutrosJogadores()
+	ultimoSyncNametagTick = 0
+	sincronizarNametagsOutrosJogadores(os.clock())
 end
 
 -- ==========================================
@@ -1269,7 +1324,8 @@ local function recuperarEstadoAposQueda(novoChar)
 	limparSnapshotsInvisivel()
 	local humNovo = novoChar and novoChar:FindFirstChildOfClass("Humanoid")
 	sincronizarCameraInvisivel(humNovo, nil)
-	restaurarNomesEVidaOutrosJogadores()
+	ultimoSyncNametagTick = 0
+	sincronizarNametagsOutrosJogadores(os.clock())
 	janelaRegistroHitAte = 0
 	pulsoMiraAte = 0
 	yawAntesPulso = nil
@@ -1361,8 +1417,8 @@ task.spawn(function()
 				checarTracksHumanoid(hum)
 			end
 		end
-		restaurarNomesEVidaOutrosJogadores()
-		task.wait(0.1)
+		sincronizarNametagsOutrosJogadores(os.clock())
+		task.wait(0.4)
 	end
 end)
 
@@ -3018,7 +3074,7 @@ end
 criarPainelHitbox()
 atualizarVisual(ativo)
 sincronizarNoAnimation()
-restaurarNomesEVidaOutrosJogadores()
+sincronizarNametagsOutrosJogadores(os.clock())
 
 local function distanciaPara(meuRoot, alvoRoot)
 	if not meuRoot or not alvoRoot or not alvoRoot.Parent then
@@ -3173,7 +3229,7 @@ RunService.Heartbeat:Connect(function(dt)
 	local killAuraAtacou = processarKillAuraFrame(agora)
 	processarAutoClickFrame(agora, killAuraAtacou)
 	atualizarInvisivelSubsolo(dt, agora)
-	restaurarNomesEVidaOutrosJogadores()
+	sincronizarNametagsOutrosJogadores(agora)
 end)
 
 task.spawn(function()
@@ -3191,6 +3247,7 @@ Players.PlayerRemoving:Connect(function(plr)
 		alvoPvpLoopPlayer = nil
 	end
 	limparMarcador(plr)
+	limparNametagJogador(plr)
 end)
 
-print("[The VOID Painel] Nomes e vida dos outros jogadores mantidos sempre visiveis com Invisivel ON e OFF!")
+print("[The VOID Painel] FPS otimizado e nametags dos outros jogadores ativos com Invisivel ON e OFF!")
