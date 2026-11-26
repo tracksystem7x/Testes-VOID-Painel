@@ -89,7 +89,7 @@ local NO_ANIMATION_PADRAO_ATIVO = false
 local INVISIVEL_PADRAO_ATIVO = false
 
 -- Abaixo do piso da quadra e corredor para ficar oculto de verdade (4.15 studs)
-local INVISIVEL_PROFUNDIDADE = 4.15
+local INVISIVEL_PROFUNDIDADE = 4.18
 local COR_PISO_QUADRA = Color3.fromRGB(196, 154, 108)
 
 local HUD_LOSANGO_PADRAO_VISIVEL = true
@@ -2210,6 +2210,255 @@ sincronizarHitboxEMarcadores = function()
 	end
 end
 
+-- ==========================================
+-- MODULO ISOLADO: VOID ESP (NAME + HEALTH + BODY)
+-- ==========================================
+local ESP_PADRAO_ATIVO = false
+local ESP_NAME_PADRAO_ATIVO = true
+local ESP_HEALTH_PADRAO_ATIVO = true
+local ESP_BODY_PADRAO_ATIVO = true
+local ESP_MAX_DISTANCIA = 350
+
+local espAtivo = ESP_PADRAO_ATIVO
+local espNameAtivo = ESP_NAME_PADRAO_ATIVO
+local espHealthAtivo = ESP_HEALTH_PADRAO_ATIVO
+local espBodyAtivo = ESP_BODY_PADRAO_ATIVO
+
+local voidEspObjetos = {}
+local ultimoUpdateVoidEsp = 0
+
+local function calcularCorVidaGradiente(pct)
+	local p = math.clamp(pct, 0, 1)
+	local verde = Color3.fromRGB(45, 225, 95)
+	local amarelo = Color3.fromRGB(245, 205, 45)
+	local vermelho = Color3.fromRGB(235, 50, 50)
+
+	if p >= 0.5 then
+		local t = (p - 0.5) / 0.5
+		return amarelo:Lerp(verde, t)
+	else
+		local t = p / 0.5
+		return vermelho:Lerp(amarelo, t)
+	end
+end
+
+local function limparVoidEspJogador(plr)
+	local obj = voidEspObjetos[plr]
+	if obj then
+		if obj.billboard then
+			pcall(function() obj.billboard:Destroy() end)
+		end
+		if obj.highlight then
+			pcall(function() obj.highlight:Destroy() end)
+		end
+		voidEspObjetos[plr] = nil
+	end
+end
+
+local function limparTodosVoidEsp()
+	for plr in pairs(voidEspObjetos) do
+		limparVoidEspJogador(plr)
+	end
+end
+
+local function garantirVoidEspJogador(plr, char, headOrRoot)
+	if not parentGui or not plr or plr == LocalPlayer or not char or not headOrRoot then
+		return nil
+	end
+
+	local obj = voidEspObjetos[plr]
+	if not obj then
+		obj = {}
+		voidEspObjetos[plr] = obj
+	end
+
+	if not obj.billboard or not obj.billboard.Parent then
+		local bb = Instance.new("BillboardGui")
+		bb.Name = "VoidEspTag"
+		bb.Size = UDim2.new(0, 168, 0, 40)
+		bb.StudsOffset = Vector3.new(0, 2.75, 0)
+		bb.AlwaysOnTop = true
+		bb.MaxDistance = ESP_MAX_DISTANCIA
+		bb.ResetOnSpawn = false
+		bb.Parent = parentGui
+
+		local nameLbl = Instance.new("TextLabel")
+		nameLbl.Name = "EspNameLabel"
+		nameLbl.Size = UDim2.new(1, 0, 0, 15)
+		nameLbl.Position = UDim2.new(0, 0, 0, 0)
+		nameLbl.BackgroundTransparency = 1
+		nameLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+		nameLbl.TextStrokeColor3 = Color3.fromRGB(12, 12, 16)
+		nameLbl.TextStrokeTransparency = 0.15
+		nameLbl.Font = Enum.Font.GothamBold
+		nameLbl.TextSize = 12
+		nameLbl.Parent = bb
+
+		local hpContainer = Instance.new("Frame")
+		hpContainer.Name = "EspHealthContainer"
+		hpContainer.Size = UDim2.new(0, 118, 0, 9)
+		hpContainer.Position = UDim2.new(0.5, 0, 0, 17)
+		hpContainer.AnchorPoint = Vector2.new(0.5, 0)
+		hpContainer.BackgroundColor3 = Color3.fromRGB(16, 16, 22)
+		hpContainer.BackgroundTransparency = 0.15
+		hpContainer.BorderSizePixel = 0
+		hpContainer.Parent = bb
+		Instance.new("UICorner", hpContainer).CornerRadius = UDim.new(0, 3)
+
+		local hpStroke = Instance.new("UIStroke")
+		hpStroke.Color = Color3.fromRGB(255, 255, 255)
+		hpStroke.Thickness = 1
+		hpStroke.Transparency = 0.55
+		hpStroke.Parent = hpContainer
+
+		local hpFill = Instance.new("Frame")
+		hpFill.Name = "EspHealthFill"
+		hpFill.Size = UDim2.new(1, -2, 1, -2)
+		hpFill.Position = UDim2.new(0, 1, 0, 1)
+		hpFill.BackgroundColor3 = Color3.fromRGB(45, 225, 95)
+		hpFill.BorderSizePixel = 0
+		hpFill.Parent = hpContainer
+		Instance.new("UICorner", hpFill).CornerRadius = UDim.new(0, 2)
+
+		local hpText = Instance.new("TextLabel")
+		hpText.Name = "EspHealthText"
+		hpText.Size = UDim2.new(1, 0, 0, 11)
+		hpText.Position = UDim2.new(0, 0, 0, 27)
+		hpText.BackgroundTransparency = 1
+		hpText.TextColor3 = Color3.fromRGB(235, 235, 245)
+		hpText.TextStrokeColor3 = Color3.fromRGB(12, 12, 16)
+		hpText.TextStrokeTransparency = 0.2
+		hpText.Font = Enum.Font.GothamBold
+		hpText.TextSize = 10
+		hpText.Parent = bb
+
+		obj.billboard = bb
+		obj.nameLbl = nameLbl
+		obj.hpContainer = hpContainer
+		obj.hpFill = hpFill
+		obj.hpText = hpText
+	end
+
+	if obj.billboard.Adornee ~= headOrRoot then
+		obj.billboard.Adornee = headOrRoot
+	end
+
+	if not obj.highlight or not obj.highlight.Parent or obj.highlight.Adornee ~= char then
+		if obj.highlight then
+			pcall(function() obj.highlight:Destroy() end)
+		end
+		local hl = Instance.new("Highlight")
+		hl.Name = "VoidEspBodyHighlight"
+		hl.Adornee = char
+		hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+		hl.FillTransparency = 0.72
+		hl.OutlineTransparency = 0.1
+		hl.Parent = parentGui
+		obj.highlight = hl
+	end
+
+	return obj
+end
+
+local function sincronizarVoidEsp(agora)
+	local now = agora or os.clock()
+	if (now - ultimoUpdateVoidEsp) < 0.08 then
+		return
+	end
+	ultimoUpdateVoidEsp = now
+
+	if not espAtivo then
+		limparTodosVoidEsp()
+		return
+	end
+
+	local _, meuRoot = getCharAndRoot(LocalPlayer)
+	local origemRef = (invisivelAtivo and posSuperficieInvisivel) or (meuRoot and meuRoot.Position)
+
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer then
+			local char = plr.Character
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+			local head = char and char:FindFirstChild("Head")
+			local root = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
+			local adornee = head or root
+
+			if char and hum and hum.Health > 0 and adornee and adornee.Parent then
+				local dentroDist = true
+				if origemRef and root then
+					dentroDist = ((root.Position - origemRef).Magnitude <= ESP_MAX_DISTANCIA)
+				end
+
+				if dentroDist then
+					local obj = garantirVoidEspJogador(plr, char, adornee)
+					if obj then
+						local isAMG = ehAmigoAMG(plr)
+						local isFocus = (not isAMG) and temFiltroFocusAtivo() and ehAlvoFocus(plr)
+						local corTema = isAMG and Color3.fromRGB(65, 235, 115)
+							or (isFocus and ROXO_NEXUS or Color3.fromRGB(245, 245, 255))
+
+						if obj.billboard then
+							local mostrarTag = espNameAtivo or espHealthAtivo
+							obj.billboard.Enabled = mostrarTag
+
+							if obj.nameLbl then
+								obj.nameLbl.Visible = espNameAtivo
+								if espNameAtivo then
+									local nomeExibir = (plr.DisplayName and plr.DisplayName ~= "" and plr.DisplayName ~= plr.Name)
+										and (plr.DisplayName .. " (@" .. plr.Name .. ")")
+										or plr.Name
+									obj.nameLbl.Text = nomeExibir
+									obj.nameLbl.TextColor3 = corTema
+								end
+							end
+
+							local maxHp = math.max(hum.MaxHealth or 100, 1)
+							local hpAtual = math.clamp(hum.Health or 0, 0, maxHp)
+							local pctHp = math.clamp(hpAtual / maxHp, 0, 1)
+							local corVida = calcularCorVidaGradiente(pctHp)
+
+							if obj.hpContainer then
+								obj.hpContainer.Visible = espHealthAtivo
+							end
+							if obj.hpFill and espHealthAtivo then
+								obj.hpFill.Size = UDim2.new(math.max(0, pctHp), -2, 1, -2)
+								obj.hpFill.BackgroundColor3 = corVida
+							end
+							if obj.hpText then
+								obj.hpText.Visible = espHealthAtivo
+								if espHealthAtivo then
+									obj.hpText.Text = string.format("%d / %d HP", math.floor(hpAtual + 0.5), math.floor(maxHp + 0.5))
+									obj.hpText.TextColor3 = corVida
+								end
+							end
+						end
+
+						if obj.highlight then
+							obj.highlight.Enabled = espBodyAtivo
+							if espBodyAtivo then
+								local corCorpo = isAMG and Color3.fromRGB(55, 225, 110)
+									or (isFocus and ROXO_NEXUS or Color3.fromRGB(220, 65, 255))
+								obj.highlight.FillColor = corCorpo
+								obj.highlight.OutlineColor = corCorpo
+							end
+						end
+					end
+				else
+					limparVoidEspJogador(plr)
+				end
+			else
+				limparVoidEspJogador(plr)
+			end
+		end
+	end
+
+	for plr in pairs(voidEspObjetos) do
+		if plr.Parent ~= Players then
+			limparVoidEspJogador(plr)
+		end
+	end
+end
+
 local painelFrameUI
 
 local function aplicarBordaRoxa(instancia, espessura)
@@ -2651,8 +2900,8 @@ local function criarPainelHitbox()
 	local btnNoAnim = criarBotaoPadrao(
 		pagVisual,
 		noAnimationAtivo and "No Animation: ON" or "No Animation: OFF",
-		UDim2.new(0, 8, 0, 4),
-		UDim2.new(1, -16, 0, 25),
+		UDim2.new(0, 8, 0, 2),
+		UDim2.new(1, -16, 0, 22),
 		11
 	)
 	btnNoAnim.BackgroundColor3 = noAnimationAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
@@ -2660,8 +2909,8 @@ local function criarPainelHitbox()
 	local btnHudLosango = criarBotaoPadrao(
 		pagVisual,
 		hudLosangoVisivel and "HUD Losango: ON" or "HUD Losango: OFF",
-		UDim2.new(0, 8, 0, 35),
-		UDim2.new(1, -16, 0, 25),
+		UDim2.new(0, 8, 0, 27),
+		UDim2.new(1, -16, 0, 22),
 		11
 	)
 	btnHudLosango.BackgroundColor3 = hudLosangoVisivel and BOTAO_ROXO_ON or BOTAO_CINZA
@@ -2669,8 +2918,8 @@ local function criarPainelHitbox()
 	local btnHudStats = criarBotaoPadrao(
 		pagVisual,
 		hudStatsVisivel and "FPS / MS: ON" or "FPS / MS: OFF",
-		UDim2.new(0, 8, 0, 66),
-		UDim2.new(1, -16, 0, 25),
+		UDim2.new(0, 8, 0, 52),
+		UDim2.new(1, -16, 0, 22),
 		11
 	)
 	btnHudStats.BackgroundColor3 = hudStatsVisivel and BOTAO_ROXO_ON or BOTAO_CINZA
@@ -2678,17 +2927,53 @@ local function criarPainelHitbox()
 	local btnInvisivel = criarBotaoPadrao(
 		pagVisual,
 		invisivelAtivo and "Invisivel: ON" or "Invisivel: OFF",
-		UDim2.new(0, 8, 0, 97),
-		UDim2.new(1, -16, 0, 25),
+		UDim2.new(0, 8, 0, 77),
+		UDim2.new(1, -16, 0, 22),
 		11
 	)
 	btnInvisivel.BackgroundColor3 = invisivelAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
 
+	local btnEspMaster = criarBotaoPadrao(
+		pagVisual,
+		espAtivo and "VOID ESP: ON" or "VOID ESP: OFF",
+		UDim2.new(0, 8, 0, 105),
+		UDim2.new(1, -16, 0, 22),
+		11
+	)
+	btnEspMaster.BackgroundColor3 = espAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
+
+	local btnEspName = criarBotaoPadrao(
+		pagVisual,
+		espNameAtivo and "ESP Name: ON" or "ESP Name: OFF",
+		UDim2.new(0, 8, 0, 130),
+		UDim2.new(0.5, -10, 0, 20),
+		10
+	)
+	btnEspName.BackgroundColor3 = espNameAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
+
+	local btnEspHealth = criarBotaoPadrao(
+		pagVisual,
+		espHealthAtivo and "ESP Health: ON" or "ESP Health: OFF",
+		UDim2.new(0.5, 2, 0, 130),
+		UDim2.new(0.5, -10, 0, 20),
+		10
+	)
+	btnEspHealth.BackgroundColor3 = espHealthAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
+
+	local btnEspBody = criarBotaoPadrao(
+		pagVisual,
+		espBodyAtivo and "ESP Body: ON" or "ESP Body: OFF",
+		UDim2.new(0, 8, 0, 153),
+		UDim2.new(1, -16, 0, 20),
+		10
+	)
+	btnEspBody.BackgroundColor3 = espBodyAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
+
 	local dicaVisual = Instance.new("TextLabel")
-	dicaVisual.Size = UDim2.new(1, -16, 0, 44)
-	dicaVisual.Position = UDim2.new(0, 8, 0, 130)
+	dicaVisual.Size = UDim2.new(1, -16, 0, 48)
+	dicaVisual.Position = UDim2.new(0, 8, 0, 178)
 	dicaVisual.BackgroundTransparency = 1
-	dicaVisual.Text = "No Animation corta soco/G. FPS/MS aparece embaixo do losango."
+	dicaVisual.Text = "ESP Name + Health (verde -> amarelo -> vermelho) + Body. Respeita AMG e Focus."
 	dicaVisual.TextColor3 = Color3.fromRGB(165, 165, 180)
 	dicaVisual.TextWrapped = true
 	dicaVisual.Font = Enum.Font.Gotham
@@ -2913,6 +3198,38 @@ local function criarPainelHitbox()
 		setInvisivelEstado(not invisivelAtivo)
 	end)
 
+	btnEspMaster.MouseButton1Click:Connect(function()
+		espAtivo = not espAtivo
+		btnEspMaster.Text = espAtivo and "VOID ESP: ON" or "VOID ESP: OFF"
+		btnEspMaster.BackgroundColor3 = espAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
+		ultimoUpdateVoidEsp = 0
+		sincronizarVoidEsp(os.clock())
+	end)
+
+	btnEspName.MouseButton1Click:Connect(function()
+		espNameAtivo = not espNameAtivo
+		btnEspName.Text = espNameAtivo and "ESP Name: ON" or "ESP Name: OFF"
+		btnEspName.BackgroundColor3 = espNameAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
+		ultimoUpdateVoidEsp = 0
+		sincronizarVoidEsp(os.clock())
+	end)
+
+	btnEspHealth.MouseButton1Click:Connect(function()
+		espHealthAtivo = not espHealthAtivo
+		btnEspHealth.Text = espHealthAtivo and "ESP Health: ON" or "ESP Health: OFF"
+		btnEspHealth.BackgroundColor3 = espHealthAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
+		ultimoUpdateVoidEsp = 0
+		sincronizarVoidEsp(os.clock())
+	end)
+
+	btnEspBody.MouseButton1Click:Connect(function()
+		espBodyAtivo = not espBodyAtivo
+		btnEspBody.Text = espBodyAtivo and "ESP Body: ON" or "ESP Body: OFF"
+		btnEspBody.BackgroundColor3 = espBodyAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
+		ultimoUpdateVoidEsp = 0
+		sincronizarVoidEsp(os.clock())
+	end)
+
 	btnOtimizar.MouseButton1Click:Connect(function()
 		aplicarOtimizacaoFpsERede(not boostFpsRedeAtivo)
 		btnOtimizar.Text = boostFpsRedeAtivo and "Otimizar FPS / Rede: ON" or "Otimizar FPS / Rede: OFF"
@@ -3049,6 +3366,7 @@ RunService.RenderStepped:Connect(function(dt)
 	if invisivelAtivo then
 		atualizarInvisivelSubsolo(0, agora)
 	end
+	sincronizarVoidEsp(agora)
 
 	if hudLosangoVisivel and hudStatsVisivel and statsLabelUI then
 		acumuladorFps += dt
@@ -3106,6 +3424,7 @@ Players.PlayerRemoving:Connect(function(plr)
 		alvoPvpLoopPlayer = nil
 	end
 	limparMarcador(plr)
+	limparVoidEspJogador(plr)
 end)
 
-print("[The VOID Painel] Codigo base pronto: nomes/vida intactos e botao Invisivel atualizado.")
+print("[The VOID Painel] Codigo base mantido + VOID ESP isolado adicionado na aba Visual.")
