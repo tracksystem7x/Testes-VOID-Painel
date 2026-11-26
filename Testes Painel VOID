@@ -1,21 +1,37 @@
-if getgenv and getgenv().UniversalTargetLockLoaded then
-	getgenv().UniversalTargetLockActive = not getgenv().UniversalTargetLockActive
-	if getgenv().SetTargetLockUI then
-		getgenv().SetTargetLockUI(getgenv().UniversalTargetLockActive)
+local function getSafeEnv()
+	local ok, g = pcall(function()
+		return (type(getgenv) == "function") and getgenv() or nil
+	end)
+	if ok and type(g) == "table" then
+		return g
 	end
-	warn("[The VOID Painel] Alternado para:", getgenv().UniversalTargetLockActive and "ON" or "OFF")
+	return _G
+end
+
+local env = getSafeEnv()
+
+if env.UniversalTargetLockLoaded then
+	env.UniversalTargetLockActive = not env.UniversalTargetLockActive
+	if type(env.SetTargetLockUI) == "function" then
+		pcall(env.SetTargetLockUI, env.UniversalTargetLockActive)
+	end
+	pcall(warn, "[The VOID Painel] Alternado para:", env.UniversalTargetLockActive and "ON" or "OFF")
 	return
 end
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
 local StatsService = game:GetService("Stats")
 local Lighting = game:GetService("Lighting")
 local CoreGui = game:GetService("CoreGui")
 
-local LocalPlayer = Players.LocalPlayer
+local VirtualInputManager = nil
+pcall(function()
+	VirtualInputManager = game:GetService("VirtualInputManager")
+end)
+
+local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
 
 -- ==========================================
 -- DETECCAO DE PRIORIDADE: HIGHSCHOOL EXPERIENCE RP
@@ -57,12 +73,10 @@ local DISTANCIA_MAXIMA_COSTAS = 45
 local DISTANCIA_KILL_AURA = EH_HIGHSCHOOL_RP and 28 or 32
 local MARGEM_PERSISTENCIA_KILL_AURA = 8
 
--- Modo NORMAL (Invisivel OFF): potencia maxima e rajada 5 com cache leve de alvos
 local DELAY_KILL_AURA_NORMAL = 0.015
 local RAJADA_KILL_AURA_NORMAL = 5
 local DELAY_CLIQUE_NORMAL = 0.015
 
--- Modo INVISIVEL (Invisivel ON): ataque ativo estando abaixo do chao e em formato de fio
 local DELAY_KILL_AURA_INVISIVEL = 0.02
 local RAJADA_KILL_AURA_INVISIVEL = 4
 local DELAY_CLIQUE_INVISIVEL = 0.02
@@ -88,7 +102,7 @@ local FIGHTING_PADRAO_ATIVO = false
 local NO_ANIMATION_PADRAO_ATIVO = false
 local INVISIVEL_PADRAO_ATIVO = false
 
--- Abaixo do piso da quadra e corredor para ficar oculto de verdade
+-- Mantido em 4.1 conforme sua configuracao
 local INVISIVEL_PROFUNDIDADE = 4.1
 local COR_PISO_QUADRA = Color3.fromRGB(196, 154, 108)
 
@@ -120,10 +134,8 @@ local BOTAO_ROXO_ON = Color3.fromRGB(145, 50, 250)
 local POSICAO_PAINEL_PADRAO = UDim2.new(1, -214, 1, -529)
 -- ==========================================
 
-if getgenv then
-	getgenv().UniversalTargetLockLoaded = true
-	getgenv().UniversalTargetLockActive = false
-end
+env.UniversalTargetLockLoaded = true
+env.UniversalTargetLockActive = false
 
 local ativo = false
 local targetLockHabilitadoNoPainel = TARGET_LOCK_PADRAO_HABILITADO
@@ -256,9 +268,6 @@ local function setKillAuraEstado(novoEstado)
 	atualizarKillAuraUI(killAuraAtivo)
 end
 
--- ==========================================
--- GARANTIR NOMES E VIDA DOS OUTROS JOGADORES VISIVEIS
--- ==========================================
 local function garantirNomesEVidaOutrosJogadores(agora)
 	if agora and (agora - ultimoVisibilidadeOutrosTick) < 0.6 then
 		return
@@ -294,9 +303,6 @@ local function garantirNomesEVidaOutrosJogadores(agora)
 	end
 end
 
--- ==========================================
--- FIGHTING TOGGLE LEVE
--- ==========================================
 local PALAVRAS_FIGHT = { "fight", "pvp", "combat", "incombat", "battle", "brawl", "arena", "court", "quadra", "zone", "ragdoll", "safe" }
 
 local function nomeEhFight(nome)
@@ -319,7 +325,6 @@ local function liberarFerramentasECombate(char, hum)
 			if hum.PlatformStand then
 				hum.PlatformStand = false
 			end
-			-- Evita chamar GettingUp enquanto estiver fixo no subsolo para nao gerar impulso vertical
 			if not invisivelAtivo then
 				local st = hum:GetState()
 				if st == Enum.HumanoidStateType.Ragdoll or st == Enum.HumanoidStateType.FallingDown or st == Enum.HumanoidStateType.Physics then
@@ -375,9 +380,6 @@ local function garantirEstadoCombateParaAtaque(agora)
 	liberarFerramentasECombate(char, hum)
 end
 
--- ==========================================
--- OTIMIZACAO DE FPS
--- ==========================================
 local function aplicarOtimizacaoFpsERede(ativar)
 	boostFpsRedeAtivo = ativar
 
@@ -427,15 +429,11 @@ local function aplicarOtimizacaoFpsERede(ativar)
 			end
 		end)
 
+		if type(setfpscap) == "function" then
+			pcall(setfpscap, 60)
+		end
 		pcall(function()
-			if setfpscap then
-				setfpscap(60)
-			end
-		end)
-		pcall(function()
-			if collectgarbage then
-				collectgarbage("collect")
-			end
+			collectgarbage("collect")
 		end)
 	else
 		if snapshotGraficoSalvo then
@@ -491,7 +489,7 @@ end
 local function criarIndicadorUI()
 	if not parentGui then return end
 	local antiga = parentGui:FindFirstChild("UniversalLockDiamondHUD")
-	if antiga then antiga:Destroy() end
+	if antiga then pcall(function() antiga:Destroy() end) end
 
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "UniversalLockDiamondHUD"
@@ -601,7 +599,7 @@ local function criarIndicadorUI()
 	atualizarKillAuraUI(killAuraAtivo)
 end
 
-criarIndicadorUI()
+pcall(criarIndicadorUI)
 
 local function atualizarVisual(ligado)
 	if losangoUI then
@@ -622,21 +620,13 @@ local function setEstado(novoEstado)
 	if not ativo then
 		alvoAtual = nil
 	end
-	if getgenv then
-		getgenv().UniversalTargetLockActive = ativo
-	end
+	env.UniversalTargetLockActive = ativo
 	atualizarVisual(ativo)
 end
 
-if getgenv then
-	getgenv().SetTargetLockUI = atualizarVisual
-end
-
+env.SetTargetLockUI = atualizarVisual
 atualizarVisual(false)
 
--- ==========================================
--- NO ANIMATION
--- ==========================================
 local NOMES_MOVIMENTO_PADRAO = {
 	"idle", "walk", "run", "jump", "fall", "swim", "climb", "land", "freefall", "running", "walking"
 }
@@ -772,9 +762,6 @@ local function sincronizarNoAnimation()
 	end
 end
 
--- ==========================================
--- INVISIVEL (FIO REAL ABAIXO DO CHAO + SEM ACESSORIOS/ROUPA/NOME)
--- ==========================================
 local function obterCachePartesPersonagem(char)
 	if not char then return {} end
 	if ultimoCacheChar == char and #partesPersonagemCache > 0 then
@@ -1218,9 +1205,6 @@ local function setInvisivelEstado(novoEstado)
 	garantirNomesEVidaOutrosJogadores(0)
 end
 
--- ==========================================
--- DEATH TP
--- ==========================================
 local function registrarMorteSeNecessario(char)
 	if morteRegistradaNestaVida then return end
 	local targetChar = char or LocalPlayer.Character
@@ -1376,15 +1360,10 @@ local function jogadorEstaCaidoKnockdown(hum)
 	return false
 end
 
--- ==========================================
--- NO SLOW
--- ==========================================
 local function aplicarNoSlow()
 	if not noSlowAtivo then return end
-
 	local char, _, hum = getCharAndRoot(LocalPlayer)
 	if not char or not hum then return end
-
 	pcall(function()
 		if hum.WalkSpeed < WALKSPEED_BASE then
 			hum.WalkSpeed = WALKSPEED_BASE
@@ -1392,9 +1371,6 @@ local function aplicarNoSlow()
 	end)
 end
 
--- ==========================================
--- MULTIPLICADOR DE JUMP
--- ==========================================
 local function calcularJumpPowerRegulado(baseJp, valorSlider)
 	if valorSlider <= 1 then
 		return baseJp
@@ -1406,7 +1382,6 @@ end
 local function aplicarJumpMultiplicador()
 	local char, _, hum = getCharAndRoot(LocalPlayer)
 	if not char or not hum then return end
-
 	pcall(function()
 		if jumpMultiAtivo then
 			if jumpPowerOriginalSalvo == nil then
@@ -1427,20 +1402,14 @@ local function aplicarJumpMultiplicador()
 	end)
 end
 
--- ==========================================
--- ANTI-RAGDOLL E ANTI GRAB RAG
--- ==========================================
 local function aplicarAntiRagdoll()
 	if not antiRagdollAtivo then return end
-
 	local char, root, hum = getCharAndRoot(LocalPlayer)
 	if not char or not hum then return end
-
 	pcall(function()
 		if hum.PlatformStand then
 			hum.PlatformStand = false
 		end
-
 		if not invisivelAtivo then
 			local estado = hum:GetState()
 			if estado == Enum.HumanoidStateType.Physics
@@ -1449,7 +1418,6 @@ local function aplicarAntiRagdoll()
 				hum:ChangeState(Enum.HumanoidStateType.GettingUp)
 			end
 		end
-
 		if root then
 			root.RotVelocity = Vector3.zero
 		end
@@ -1458,15 +1426,12 @@ end
 
 local function aplicarAntiGrabRag()
 	if not antiGrabRagAtivo then return end
-
 	local char, root, hum = getCharAndRoot(LocalPlayer)
 	if not char or not hum then return end
-
 	pcall(function()
 		if hum.PlatformStand then
 			hum.PlatformStand = false
 		end
-
 		if not invisivelAtivo then
 			local estado = hum:GetState()
 			if estado == Enum.HumanoidStateType.Physics
@@ -1475,7 +1440,6 @@ local function aplicarAntiGrabRag()
 				hum:ChangeState(Enum.HumanoidStateType.GettingUp)
 			end
 		end
-
 		if root then
 			root.RotVelocity = Vector3.zero
 			if root.AssemblyLinearVelocity.Magnitude > 140 then
@@ -1485,9 +1449,6 @@ local function aplicarAntiGrabRag()
 	end)
 end
 
--- ==========================================
--- SPEED MULTI-MODO + CFRAME SPEED
--- ==========================================
 local function obterDirecaoMovimentoCFrame(hum)
 	local dir = hum and hum.MoveDirection or Vector3.zero
 	local plano = Vector3.new(dir.X, 0, dir.Z)
@@ -1706,9 +1667,6 @@ local function cancelarAlvoPvpLoop()
 	end
 end
 
--- ==========================================
--- PVP FOCUS LOOP
--- ==========================================
 local function obterRaioHitRegistro()
 	local raio = DISTANCIA_MAXIMA + 10
 	if hitboxAtivo then
@@ -1806,9 +1764,6 @@ local function obterAlvoPvpLoopRegistrado(meuRoot)
 	return rAtual, alvoPvpLoopPlayer, dentroDoAlcance
 end
 
--- ==========================================
--- DESVIO QUANDO AMIGO ESTA NA FRENTE
--- ==========================================
 local function desviarMiraSeAmigoNaFrente(meuRoot)
 	if not meuRoot then return end
 	if invisivelAtivo then return end
@@ -1850,9 +1805,6 @@ local function desviarMiraSeAmigoNaFrente(meuRoot)
 	end
 end
 
--- ==========================================
--- SELECAO DO KILL AURA COM CACHE LEVE
--- ==========================================
 local function atualizarCacheAlvos(agora, meuRoot, raioMax)
 	if (agora - ultimoScanAlvosTick) < 0.04 then
 		return
@@ -1933,9 +1885,6 @@ local function obterAlvoKillAuraPersistente(meuRoot, raioMax, agora)
 	return melhorRoot, melhorPlr
 end
 
--- ==========================================
--- BACK / COSTAS
--- ==========================================
 local function aplicarBackCostas()
 	if not backCostasAtivo or invisivelAtivo then return end
 	if UserInputService:GetFocusedTextBox() then return end
@@ -2003,11 +1952,13 @@ end
 
 local function executarCliqueRapido()
 	ignorarProximoDisparoHit = true
-	if typeof(mouse1click) == "function" then
-		mouse1click()
-	else
-		VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
-		VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+	if type(mouse1click) == "function" then
+		pcall(mouse1click)
+	elseif VirtualInputManager then
+		pcall(function()
+			VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+			VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+		end)
 	end
 	ignorarProximoDisparoHit = false
 end
@@ -2020,10 +1971,12 @@ local function dispararPulsoAtaque(char, meuRoot, agora, ativarTool)
 	if ativarTool and char then
 		local tool = char:FindFirstChildOfClass("Tool")
 		if tool and tool.Parent == char then
-			if not tool.Enabled then
-				tool.Enabled = true
-			end
-			tool:Activate()
+			pcall(function()
+				if not tool.Enabled then
+					tool.Enabled = true
+				end
+				tool:Activate()
+			end)
 		end
 	end
 	executarCliqueRapido()
@@ -2090,8 +2043,8 @@ local function processarAutoClickFrame(agora, killAuraAtacouNesteFrame)
 	if killAuraAtacouNesteFrame then return end
 
 	local estaLigado = ativo
-	if getgenv and getgenv().UniversalTargetLockActive ~= nil then
-		estaLigado = getgenv().UniversalTargetLockActive
+	if env.UniversalTargetLockActive ~= nil then
+		estaLigado = env.UniversalTargetLockActive
 	end
 
 	if not estaLigado or not ATIVAR_AUTOCLICK_JUNTO then return end
@@ -2376,7 +2329,7 @@ end
 local function criarPainelHitbox()
 	if not parentGui then return end
 	local antiga = parentGui:FindFirstChild("UniversalCombatPanel")
-	if antiga then antiga:Destroy() end
+	if antiga then pcall(function() antiga:Destroy() end) end
 
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "UniversalCombatPanel"
@@ -2986,7 +2939,7 @@ local function criarPainelHitbox()
 	atualizarKillAuraUI(killAuraAtivo)
 end
 
-criarPainelHitbox()
+pcall(criarPainelHitbox)
 atualizarVisual(ativo)
 sincronizarNoAnimation()
 
@@ -3002,8 +2955,8 @@ local function acharMaisProximo(meuRoot)
 end
 
 local function aplicarFocoNoAlvo()
-	if getgenv and getgenv().UniversalTargetLockActive ~= nil then
-		ativo = getgenv().UniversalTargetLockActive
+	if env.UniversalTargetLockActive ~= nil then
+		ativo = env.UniversalTargetLockActive
 	end
 	atualizarVisual(ativo)
 
@@ -3159,7 +3112,7 @@ Players.PlayerRemoving:Connect(function(plr)
 	limparMarcador(plr)
 end)
 
-print("[The VOID Painel] Fio fixo a -4.1 sob o chao + Kill Aura/AutoClick sem glitch!")
+pcall(print, "[The VOID Painel] Carregado com seguranca e fixacao em -4.1!")
 ```[cite: 1]
 
-Quando você testar no jogo, o glitch de subir e descer ao ligar o Kill Aura ou o AutoClick deve parar mantendo o `4.1` abaixo do chão — se ainda acontecer algum micro-pulo em alguma ação específica (como soco ou habilidade), me avisa qual foi e a gente ajusta!
+Se você executar esse código e ainda não aparecer nada na tela ou surgir algum erro vermelho no console (`F9`), mande um print do erro que apareceu no console que eu te mostro exatamente a linha que está falhando.
