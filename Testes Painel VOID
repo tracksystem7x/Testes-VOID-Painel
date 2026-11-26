@@ -19,6 +19,25 @@ local CoreGui = game:GetService("CoreGui")
 local LocalPlayer = Players.LocalPlayer
 
 -- ==========================================
+-- DETECCAO DE PRIORIDADE: HIGHSCHOOL EXPERIENCE RP
+-- ==========================================
+local PLACE_ID_HIGHSCHOOL_RP = 112333343527957
+local UNIVERSE_ID_HIGHSCHOOL_RP = 10394064134
+
+local EH_HIGHSCHOOL_RP = (game.PlaceId == PLACE_ID_HIGHSCHOOL_RP) or (game.GameId == UNIVERSE_ID_HIGHSCHOOL_RP)
+if not EH_HIGHSCHOOL_RP then
+	local okInfo, info = pcall(function()
+		return game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
+	end)
+	if okInfo and info and info.Name then
+		local lowName = string.lower(info.Name)
+		if string.find(lowName, "highschool experience", 1, true) or string.find(lowName, "high school experience", 1, true) then
+			EH_HIGHSCHOOL_RP = true
+		end
+	end
+end
+
+-- ==========================================
 -- CONFIGURACAO GERAL
 -- ==========================================
 local TECLA_ATALHO = Enum.KeyCode.E
@@ -28,7 +47,7 @@ local TECLA_ESPECIAL = Enum.KeyCode.G
 local TECLA_CANCELAR_PVP_LOOP = Enum.KeyCode.R
 local JANELA_ESPECIAL_SEG = 1.2
 
-local DISTANCIA_MAXIMA = 22
+local DISTANCIA_MAXIMA = EH_HIGHSCHOOL_RP and 20 or 22
 local MARGEM_TROCA = 3.5
 local FIRMEZA_GIRO = 1.0
 local ORBITAR = false
@@ -36,10 +55,10 @@ local ORBITAR = false
 local DISTANCIA_COSTAS = 3.2
 local DISTANCIA_MAXIMA_COSTAS = 45
 
-local DISTANCIA_KILL_AURA = 30
+local DISTANCIA_KILL_AURA = EH_HIGHSCHOOL_RP and 26 or 30
 local MARGEM_PERSISTENCIA_KILL_AURA = 6
 local DELAY_KILL_AURA = 0.001
-local RAJADA_KILL_AURA = 5
+local RAJADA_KILL_AURA = EH_HIGHSCHOOL_RP and 3 or 5
 local KILL_AURA_PULSO_ALVO = false
 local DURACAO_PULSO_MIRA = 0.008
 
@@ -53,15 +72,15 @@ local JUMP_FATOR_SUAVE = 0.08
 local TARGET_LOCK_PADRAO_HABILITADO = true
 local PVP_FOCUS_LOOP_PADRAO_ATIVO = false
 local BACK_COSTAS_PADRAO_ATIVO = false
-local ANTI_RAGDOLL_PADRAO_ATIVO = false
-local ANTI_GRAB_RAG_PADRAO_ATIVO = false
+local ANTI_RAGDOLL_PADRAO_ATIVO = EH_HIGHSCHOOL_RP and true or false
+local ANTI_GRAB_RAG_PADRAO_ATIVO = EH_HIGHSCHOOL_RP and true or false
 local DEATH_TP_PADRAO_ATIVO = false
 local NO_SLOW_PADRAO_ATIVO = false
 local KILL_AURA_PADRAO_ATIVO = false
 local FIGHTING_PADRAO_ATIVO = false
 local NO_ANIMATION_PADRAO_ATIVO = false
 local INVISIVEL_PADRAO_ATIVO = false
-local INVISIVEL_PROFUNDIDADE = 2.8
+local INVISIVEL_PROFUNDIDADE = EH_HIGHSCHOOL_RP and 2.6 or 2.8
 local HUD_LOSANGO_PADRAO_VISIVEL = true
 local HUD_STATS_PADRAO_VISIVEL = true
 local SPEED_CFRAME_PADRAO_ATIVO = false
@@ -195,9 +214,9 @@ local function setKillAuraEstado(novoEstado)
 end
 
 -- ==========================================
--- FIGHTING TOGGLE (INSTANTANEO E LEVE, SEM LOOP PESADO)
+-- FIGHTING TOGGLE (INSTANTANEO E LEVE, COM PRIORIDADE HIGHSCHOOL RP)
 -- ==========================================
-local PALAVRAS_FIGHT = { "fight", "pvp", "combat", "incombat", "battle" }
+local PALAVRAS_FIGHT = { "fight", "pvp", "combat", "incombat", "battle", "brawl", "ragdoll" }
 
 local function nomeEhFight(nome)
 	if not nome or nome == "" then return false end
@@ -213,6 +232,7 @@ end
 local function alternarEstadoFighting(ativar)
 	fightingAtivo = ativar
 	local char = LocalPlayer.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
 
 	local function ajustarContainer(container)
 		if not container then return end
@@ -238,6 +258,18 @@ local function alternarEstadoFighting(ativar)
 
 	ajustarContainer(LocalPlayer)
 	ajustarContainer(char)
+
+	-- No Highschool Experience RP, garante que o personagem local nao fique preso em Sit ou ragdoll ao ativar luta
+	if EH_HIGHSCHOOL_RP and ativar and hum then
+		pcall(function()
+			if hum.Sit then
+				hum.Sit = false
+			end
+			if hum.PlatformStand then
+				hum.PlatformStand = false
+			end
+		end)
+	end
 
 	pcall(function()
 		for _, desc in ipairs(ReplicatedStorage:GetDescendants()) do
@@ -1918,7 +1950,7 @@ local function criarPainelHitbox()
 	titulo.Size = UDim2.new(1, -16, 0, 18)
 	titulo.Position = UDim2.new(0, 8, 0, 6)
 	titulo.BackgroundTransparency = 1
-	titulo.Text = "The VOID Painel"
+	titulo.Text = EH_HIGHSCHOOL_RP and "The VOID Painel [HS RP]" or "The VOID Painel"
 	titulo.TextColor3 = ROXO_NEXUS
 	titulo.Font = Enum.Font.GothamBold
 	titulo.TextSize = 13
