@@ -205,6 +205,8 @@ local killAuraHudDotUI
 local killAuraHudLabelUI
 local killAuraHudStrokeUI
 
+local atualizarInvisivelSubsolo
+
 local function obterDelayKillAuraAtual()
 	return invisivelAtivo and DELAY_KILL_AURA_INVISIVEL or DELAY_KILL_AURA_NORMAL
 end
@@ -317,9 +319,12 @@ local function liberarFerramentasECombate(char, hum)
 			if hum.PlatformStand then
 				hum.PlatformStand = false
 			end
-			local st = hum:GetState()
-			if st == Enum.HumanoidStateType.Ragdoll or st == Enum.HumanoidStateType.FallingDown or st == Enum.HumanoidStateType.Physics then
-				hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+			-- Evita chamar GettingUp enquanto estiver fixo no subsolo para nao gerar impulso vertical
+			if not invisivelAtivo then
+				local st = hum:GetState()
+				if st == Enum.HumanoidStateType.Ragdoll or st == Enum.HumanoidStateType.FallingDown or st == Enum.HumanoidStateType.Physics then
+					hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+				end
 			end
 		end)
 	end
@@ -678,7 +683,8 @@ local function ehAnimacaoMovimentoPadrao(track)
 end
 
 local function deveCortarTrack(track)
-	if not noAnimationAtivo or not track then return false end
+	if not track then return false end
+	if not noAnimationAtivo and not invisivelAtivo then return false end
 	if ehAnimacaoMovimentoPadrao(track) then
 		return false
 	end
@@ -749,7 +755,7 @@ local function sincronizarNoAnimation()
 
 	limparConexoesAnim()
 	local hum = char:FindFirstChildOfClass("Humanoid")
-	if noAnimationAtivo then
+	if noAnimationAtivo or invisivelAtivo then
 		checarTracksHumanoid(hum)
 	end
 
@@ -1100,7 +1106,31 @@ end
 
 local ultimoSyncTamanhoInvisivel = 0
 
-local function atualizarInvisivelSubsolo(dt, agora)
+local function fixarRootSubsoloExato(root, hum)
+	if not invisivelAtivo or not posSuperficieInvisivel or not root or not root.Parent then
+		return
+	end
+
+	local alturaLimiteVoid = workspace.FallenPartsDestroyHeight + 25
+	local yAbaixo = math.max(posSuperficieInvisivel.Y - INVISIVEL_PROFUNDIDADE, alturaLimiteVoid)
+	local cfFioDeitadoSubsolo = CFrame.new(posSuperficieInvisivel.X, yAbaixo, posSuperficieInvisivel.Z)
+		* CFrame.fromEulerAnglesYXZ(0, yawSuperficieInvisivel, 0)
+		* CFrame.Angles(math.rad(90), 0, 0)
+
+	pcall(function()
+		if hum then
+			if hum.Sit then hum.Sit = false end
+			if hum.PlatformStand then hum.PlatformStand = false end
+		end
+		if root.CanCollide then root.CanCollide = false end
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
+		root.RotVelocity = Vector3.zero
+		root.CFrame = cfFioDeitadoSubsolo
+	end)
+end
+
+atualizarInvisivelSubsolo = function(dt, agora)
 	local char = LocalPlayer.Character
 	local hum = char and char:FindFirstChildOfClass("Humanoid")
 	local root = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
@@ -1133,22 +1163,8 @@ local function atualizarInvisivelSubsolo(dt, agora)
 		yawSuperficieInvisivel = math.atan2(-passoPlano.X, -passoPlano.Z)
 	end
 
-	local alturaLimiteVoid = workspace.FallenPartsDestroyHeight + 25
-	local yAbaixo = math.max(posSuperficieInvisivel.Y - INVISIVEL_PROFUNDIDADE, alturaLimiteVoid)
-	local cfFioDeitadoSubsolo = CFrame.new(posSuperficieInvisivel.X, yAbaixo, posSuperficieInvisivel.Z)
-		* CFrame.fromEulerAnglesYXZ(0, yawSuperficieInvisivel, 0)
-		* CFrame.Angles(math.rad(90), 0, 0)
-
-	if hum.Sit then hum.Sit = false end
-	if hum.PlatformStand then hum.PlatformStand = false end
-	if root.CanCollide then root.CanCollide = false end
-	if root.AssemblyLinearVelocity ~= Vector3.zero then
-		root.AssemblyLinearVelocity = Vector3.zero
-	end
-	if root.AssemblyAngularVelocity ~= Vector3.zero then
-		root.AssemblyAngularVelocity = Vector3.zero
-	end
-	root.CFrame = cfFioDeitadoSubsolo
+	fixarRootSubsoloExato(root, hum)
+	checarTracksHumanoid(hum)
 
 	local now = agora or os.clock()
 	local aplicarTamanhos = (now - ultimoSyncTamanhoInvisivel) >= 0.35
@@ -1198,6 +1214,7 @@ local function setInvisivelEstado(novoEstado)
 		aplicarFioTotalInvisivel(char, hum, true, true)
 		atualizarInvisivelSubsolo(0.016, os.clock())
 	end
+	sincronizarNoAnimation()
 	garantirNomesEVidaOutrosJogadores(0)
 end
 
@@ -1323,7 +1340,7 @@ end)
 
 task.spawn(function()
 	while true do
-		if noAnimationAtivo then
+		if noAnimationAtivo or invisivelAtivo then
 			local char = LocalPlayer.Character
 			if char then
 				local animate = char:FindFirstChild("Animate")
@@ -1424,11 +1441,13 @@ local function aplicarAntiRagdoll()
 			hum.PlatformStand = false
 		end
 
-		local estado = hum:GetState()
-		if estado == Enum.HumanoidStateType.Physics
-			or estado == Enum.HumanoidStateType.FallingDown
-			or estado == Enum.HumanoidStateType.Ragdoll then
-			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+		if not invisivelAtivo then
+			local estado = hum:GetState()
+			if estado == Enum.HumanoidStateType.Physics
+				or estado == Enum.HumanoidStateType.FallingDown
+				or estado == Enum.HumanoidStateType.Ragdoll then
+				hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+			end
 		end
 
 		if root then
@@ -1448,11 +1467,13 @@ local function aplicarAntiGrabRag()
 			hum.PlatformStand = false
 		end
 
-		local estado = hum:GetState()
-		if estado == Enum.HumanoidStateType.Physics
-			or estado == Enum.HumanoidStateType.FallingDown
-			or estado == Enum.HumanoidStateType.Ragdoll then
-			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+		if not invisivelAtivo then
+			local estado = hum:GetState()
+			if estado == Enum.HumanoidStateType.Physics
+				or estado == Enum.HumanoidStateType.FallingDown
+				or estado == Enum.HumanoidStateType.Ragdoll then
+				hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+			end
 		end
 
 		if root then
@@ -2006,6 +2027,11 @@ local function dispararPulsoAtaque(char, meuRoot, agora, ativarTool)
 		end
 	end
 	executarCliqueRapido()
+	if invisivelAtivo then
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		fixarRootSubsoloExato(meuRoot, hum)
+		checarTracksHumanoid(hum)
+	end
 end
 
 local function processarKillAuraFrame(agora)
@@ -2053,6 +2079,10 @@ local function processarKillAuraFrame(agora)
 		dispararPulsoAtaque(char, meuRoot, agora, idx == 1)
 	end
 
+	if invisivelAtivo then
+		fixarRootSubsoloExato(meuRoot, char:FindFirstChildOfClass("Humanoid"))
+	end
+
 	return true
 end
 
@@ -2073,6 +2103,9 @@ local function processarAutoClickFrame(agora, killAuraAtacouNesteFrame)
 	if meuRoot and haAlvoNoAlcanceAutoClick(meuRoot) then
 		ultimoDisparoAutoClickTick = agora
 		dispararPulsoAtaque(char, meuRoot, agora, true)
+		if invisivelAtivo then
+			fixarRootSubsoloExato(meuRoot, char:FindFirstChildOfClass("Humanoid"))
+		end
 	end
 end
 
@@ -3069,6 +3102,14 @@ RunService.RenderStepped:Connect(function(dt)
 	restaurarPulsoMiraKillAura()
 	garantirNomesEVidaOutrosJogadores(agora)
 
+	if invisivelAtivo then
+		local charInv, rootInv, humInv = getCharAndRoot(LocalPlayer)
+		if charInv and rootInv then
+			fixarRootSubsoloExato(rootInv, humInv)
+			checarTracksHumanoid(humInv)
+		end
+	end
+
 	if hudLosangoVisivel and hudStatsVisivel and statsLabelUI then
 		acumuladorFps += dt
 		framesContados += 1
@@ -3118,4 +3159,7 @@ Players.PlayerRemoving:Connect(function(plr)
 	limparMarcador(plr)
 end)
 
-print("[The VOID Painel] Fio minimo sob o chao (-7.5 studs) + Kill Aura/AutoClick ativos!")
+print("[The VOID Painel] Fio fixo a -4.1 sob o chao + Kill Aura/AutoClick sem glitch!")
+```[cite: 1]
+
+Quando você testar no jogo, o glitch de subir e descer ao ligar o Kill Aura ou o AutoClick deve parar mantendo o `4.1` abaixo do chão — se ainda acontecer algum micro-pulo em alguma ação específica (como soco ou habilidade), me avisa qual foi e a gente ajusta!
