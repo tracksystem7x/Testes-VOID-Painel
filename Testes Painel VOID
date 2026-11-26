@@ -36,8 +36,8 @@ local CFG = {
 	DIST_GRAB_ASSIST = 70.0,
 	GRAB_PUXAR_DIST = 28.0,
 	GRAB_JANELA_ALIGN = 0.22,
-	SPAM_GRAB_DELAY = 0.045,
-	SPAM_GRAB_RAJADA = 3,
+	SPAM_GRAB_DELAY = 0.09,
+	SPAM_GRAB_HOLD = 0.02,
 	MARGEM_TROCA = 3.5,
 	FIRMEZA_GIRO = 1.0,
 	ORBITAR = false,
@@ -1053,7 +1053,7 @@ local function getPvpAlvo(mr)
 end
 
 -- ==========================================
--- GRAB ASSIST (TECLA G) + SPAM GRAB (RAJADA)
+-- GRAB ASSIST (TECLA G) + SPAM GRAB (LOOP LIVRE, SEM LOCK)
 -- ==========================================
 local function escolherAlvoGrab(mr, rMax, candPreferido)
 	local refPos = (S.inv and S.posInv) or mr.Position
@@ -1104,18 +1104,6 @@ local function escolherAlvoGrab(mr, rMax, candPreferido)
 	return bestR, bestP, bestD
 end
 
-local function dispararRajadaGrab(rajada)
-	local qtd = math.max(1, rajada or 1)
-	ignHit = true
-	for _ = 1, qtd do
-		pcall(function()
-			VirtualInputManager:SendKeyEvent(true, CFG.KEY_ESPECIAL, false, game)
-			VirtualInputManager:SendKeyEvent(false, CFG.KEY_ESPECIAL, false, game)
-		end)
-	end
-	ignHit = false
-end
-
 local function aplGrabAssist(forcarNovoAlvo, moverPosicao)
 	if not S.grabAssist then return end
 	local ch, mr, hum = getCR(LocalPlayer)
@@ -1161,21 +1149,42 @@ local function aplGrabAssist(forcarNovoAlvo, moverPosicao)
 	end)
 end
 
-local function procSpamGrab(now)
-	if not S.spamGrab or UserInputService:GetFocusedTextBox() then return end
-	if (now - S.tSpamGrab) < (CFG.SPAM_GRAB_DELAY or 0.045) then return end
-	local _, mr = getCR(LocalPlayer)
-	if not mr then return end
-	local rMax = math.clamp(S.grabDist or CFG.DIST_GRAB_ASSIST or 70, 1, 100)
-	local alvoRoot, alvoPlr, dist = escolherAlvoGrab(mr, rMax, S.alvoGrabTravado)
-	if not alvoRoot or not alvoPlr or not dist then return end
+local spamGrabRodando = false
+local function iniciarLoopSpamGrab()
+	if spamGrabRodando then return end
+	spamGrabRodando = true
+	task.spawn(function()
+		while S.spamGrab do
+			if not UserInputService:GetFocusedTextBox() then
+				local ch = LocalPlayer.Character
+				local hum = ch and ch:FindFirstChildOfClass("Humanoid")
+				if ch and hum and hum.Health > 0 then
+					ignHit = true
+					pcall(function()
+						VirtualInputManager:SendKeyEvent(true, CFG.KEY_ESPECIAL, false, game)
+					end)
+					task.wait(CFG.SPAM_GRAB_HOLD or 0.02)
+					pcall(function()
+						VirtualInputManager:SendKeyEvent(false, CFG.KEY_ESPECIAL, false, game)
+					end)
+					ignHit = false
+				end
+			end
+			task.wait(math.max(0.02, CFG.SPAM_GRAB_DELAY or 0.09))
+		end
+		ignHit = false
+		spamGrabRodando = false
+	end)
+end
 
-	local limiteProximidade = math.max(12, math.min(rMax, (S.grabPullDist or 28) * 0.65))
-	if dist <= limiteProximidade then
-		S.tSpamGrab = now
-		S.alvoGrabTravado = alvoPlr
-		aplGrabAssist(false, false)
-		dispararRajadaGrab(CFG.SPAM_GRAB_RAJADA or 3)
+local function setSpamGrab(on)
+	S.spamGrab = not not on
+	if UI.btnSpamGrab then
+		UI.btnSpamGrab.Text = S.spamGrab and "Spam Grab: ON" or "Spam Grab: OFF"
+		UI.btnSpamGrab.BackgroundColor3 = S.spamGrab and CFG.ROXO_ON or CFG.CINZA
+	end
+	if S.spamGrab then
+		iniciarLoopSpamGrab()
 	end
 end
 
@@ -1842,19 +1851,7 @@ local function criarPainel()
 	bPvp.MouseButton1Click:Connect(function() S.pvpLoop = not S.pvpLoop; bPvp.Text = S.pvpLoop and "PvP Focus Loop: ON" or "PvP Focus Loop: OFF"; bPvp.BackgroundColor3 = S.pvpLoop and CFG.ROXO_ON or CFG.CINZA; S.alvoPvp, S.alvo, S.tJanelaHit = nil, nil, 0; syncHitMarc() end)
 	bCost.MouseButton1Click:Connect(function() S.backCostas = not S.backCostas; bCost.Text = S.backCostas and "Back / Costas: ON" or "Back / Costas: OFF"; bCost.BackgroundColor3 = S.backCostas and CFG.ROXO_ON or CFG.CINZA end)
 	bGrabAssist.MouseButton1Click:Connect(function() S.grabAssist = not S.grabAssist; bGrabAssist.Text = S.grabAssist and "Grab (G): ON" or "Grab (G): OFF"; bGrabAssist.BackgroundColor3 = S.grabAssist and CFG.ROXO_ON or CFG.CINZA end)
-	bSpamGrab.MouseButton1Click:Connect(function()
-		S.spamGrab = not S.spamGrab
-		bSpamGrab.Text = S.spamGrab and "Spam Grab: ON" or "Spam Grab: OFF"
-		bSpamGrab.BackgroundColor3 = S.spamGrab and CFG.ROXO_ON or CFG.CINZA
-		S.tSpamGrab = 0
-		if S.spamGrab then
-			S.grabAssist = true
-			bGrabAssist.Text = "Grab (G): ON"
-			bGrabAssist.BackgroundColor3 = CFG.ROXO_ON
-			aplGrabAssist(true, false)
-			dispararRajadaGrab(CFG.SPAM_GRAB_RAJADA or 3)
-		end
-	end)
+	bSpamGrab.MouseButton1Click:Connect(function() setSpamGrab(not S.spamGrab) end)
 	bRag.MouseButton1Click:Connect(function() S.antiRag = not S.antiRag; bRag.Text = S.antiRag and "Anti-Ragdoll: ON" or "Anti-Ragdoll: OFF"; bRag.BackgroundColor3 = S.antiRag and CFG.ROXO_ON or CFG.CINZA end)
 	bGrab.MouseButton1Click:Connect(function() S.antiGrab = not S.antiGrab; bGrab.Text = S.antiGrab and "Anti Grab Rag: ON" or "Anti Grab Rag: OFF"; bGrab.BackgroundColor3 = S.antiGrab and CFG.ROXO_ON or CFG.CINZA end)
 	bDtp.MouseButton1Click:Connect(function() S.deathTp = not S.deathTp; bDtp.Text = S.deathTp and "Death TP: ON" or "Death TP: OFF"; bDtp.BackgroundColor3 = S.deathTp and CFG.ROXO_ON or CFG.CINZA end)
@@ -1877,7 +1874,7 @@ local function criarPainel()
 	bRst.MouseButton1Click:Connect(function() fr.Position = UDim2.new(1, -214, 1, -585) end)
 
 	selAba("Combat")
-	UI.painel, UI.btnAuto, UI.btnKa, UI.btnInv = fr, bAuto, bKa, bIv
+	UI.painel, UI.btnAuto, UI.btnKa, UI.btnInv, UI.btnSpamGrab = fr, bAuto, bKa, bIv, bSpamGrab
 	updKaUI(S.ka)
 	updInvUI(S.inv)
 end
@@ -1960,7 +1957,6 @@ end)
 RunService.Heartbeat:Connect(function(dt)
 	local now = os.clock()
 	aplCostas(); aplNoSlow(); aplJump(); aplAntiRag(); aplAntiGrab(); aplSpeed(dt)
-	procSpamGrab(now)
 	local kaAtk = procKa(now)
 	procClk(now, kaAtk)
 	updInv(dt, now)
@@ -1981,4 +1977,4 @@ Players.PlayerRemoving:Connect(function(plr)
 	S.limpEspPlr(plr)
 end)
 
-print("[The VOID Painel] Spam Grab adicionado na aba Combat.")
+print("[The VOID Painel] Spam Grab em loop livre ativado na aba Combat.")
