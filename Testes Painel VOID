@@ -34,6 +34,8 @@ local CFG = {
 	JANELA_ESP = 1.2,
 	DIST_MAX = EH_HIGHSCHOOL_RP and 20 or 22,
 	DIST_GRAB_ASSIST = 22,
+	GRAB_PUXAR_DIST = 6.5,
+	GRAB_JANELA_ALIGN = 0.22,
 	MARGEM_TROCA = 3.5,
 	FIRMEZA_GIRO = 1.0,
 	ORBITAR = false,
@@ -113,6 +115,8 @@ local S = {
 	tScan = 0,
 	cacheAlvos = {},
 	tJanelaHit = 0,
+	tJanelaGrab = 0,
+	alvoGrabTravado = nil,
 	tSyncCombat = 0,
 	hitOn = false,
 	hitVis = true,
@@ -716,7 +720,8 @@ local function monMorte(ch)
 end
 
 local function recQueda(nc)
-	S.alvo, S.alvoPvp, S.alvoKa, S.posInv, S.cacheChar = nil, nil, nil, nil, nil
+	S.alvo, S.alvoPvp, S.alvoKa, S.alvoGrabTravado, S.posInv, S.cacheChar = nil, nil, nil, nil, nil, nil
+	S.tJanelaGrab = 0
 	destAnc()
 	limpSnapInv()
 	syncCamInv(nc and nc:FindFirstChildOfClass("Humanoid"), nil)
@@ -1042,9 +1047,9 @@ local function getPvpAlvo(mr)
 end
 
 -- ==========================================
--- GRAB ASSIST (TECLA G): ALINHAMENTO RAPIDO EM FOCO OU MAIS PROXIMO
+-- GRAB ASSIST (TECLA G): ALINHAMENTO + APROXIMACAO CURTA EM FOCO OU MAIS PROXIMO
 -- ==========================================
-local function escolherAlvoGrab(mr, rMax)
+local function escolherAlvoGrab(mr, rMax, candPreferido)
 	local refPos = (S.inv and S.posInv) or mr.Position
 
 	local function validarPlr(plr)
@@ -1054,6 +1059,11 @@ local function escolherAlvoGrab(mr, rMax)
 		local d = (ra.Position - refPos).Magnitude
 		if d > rMax or d <= 0.05 then return nil, nil end
 		return ra, d
+	end
+
+	if candPreferido then
+		local ra, d = validarPlr(candPreferido)
+		if ra then return ra, candPreferido, d end
 	end
 
 	-- 1. Prioriza quem ja esta marcado/focado (PvP / Kill Aura / Target Lock)
@@ -1091,27 +1101,47 @@ local function escolherAlvoGrab(mr, rMax)
 	return bestR, bestP, bestD
 end
 
-local function aplGrabAssist()
+local function aplGrabAssist(forcarNovoAlvo)
 	if not S.grabAssist then return end
 	local ch, mr, hum = getCR(LocalPlayer)
 	if not ch or not mr then return end
-	local rMax = math.max(CFG.DIST_GRAB_ASSIST, CFG.DIST_MAX)
-	local alvoRoot, alvoPlr = escolherAlvoGrab(mr, rMax)
-	if not alvoRoot or not alvoPlr then return end
+	local rMax = math.max(0, CFG.DIST_GRAB_ASSIST)
+	local cand = (not forcarNovoAlvo) and S.alvoGrabTravado or nil
+	local alvoRoot, alvoPlr, dist = escolherAlvoGrab(mr, rMax, cand)
+	if not alvoRoot or not alvoPlr then
+		if forcarNovoAlvo then S.alvoGrabTravado = nil end
+		return
+	end
+	if forcarNovoAlvo then
+		S.alvoGrabTravado = alvoPlr
+		S.tJanelaGrab = os.clock() + math.max(0.05, CFG.GRAB_JANELA_ALIGN)
+	end
 
 	local refPos = (S.inv and S.posInv) or mr.Position
 	local dx = alvoRoot.Position.X - refPos.X
 	local dz = alvoRoot.Position.Z - refPos.Z
-	if (dx * dx + dz * dz) <= 0.0025 then return end
+	local horizDist = math.sqrt(dx * dx + dz * dz)
+	if horizDist <= 0.001 then return end
 
 	local yawAlvo = math.atan2(-dx, -dz)
+	local puxar = math.max(0, CFG.GRAB_PUXAR_DIST)
+	local novaPos = refPos
+	if dist and dist > puxar then
+		local dirX, dirZ = dx / horizDist, dz / horizDist
+		local avanco = math.min(dist - puxar, horizDist - 1.5)
+		if avanco > 0.05 then
+			novaPos = Vector3.new(refPos.X + dirX * avanco, refPos.Y, refPos.Z + dirZ * avanco)
+		end
+	end
+
 	pcall(function()
 		if S.inv and S.posInv then
+			S.posInv = novaPos
 			S.yawInv = yawAlvo
 			travarInv(ch, mr, hum)
 		else
 			mr.AssemblyAngularVelocity = Vector3.zero
-			mr.CFrame = CFrame.new(mr.Position) * CFrame.fromEulerAnglesYXZ(0, yawAlvo, 0)
+			mr.CFrame = CFrame.new(novaPos.X, mr.Position.Y, novaPos.Z) * CFrame.fromEulerAnglesYXZ(0, yawAlvo, 0)
 		end
 	end)
 end
@@ -1835,7 +1865,7 @@ UserInputService.InputBegan:Connect(function(inp, gp)
 	if gp or UserInputService:GetFocusedTextBox() then return end
 	if inp.KeyCode == CFG.KEY_ESPECIAL then
 		tEsp = os.clock()
-		aplGrabAssist()
+		aplGrabAssist(true)
 	elseif inp.KeyCode == CFG.KEY_KA then setKa(not S.ka)
 	elseif inp.KeyCode == CFG.KEY_ATALHO then setLock(not S.ativo)
 	elseif inp.KeyCode == CFG.KEY_PAINEL and UI.painel then UI.painel.Visible = not UI.painel.Visible
@@ -1855,6 +1885,7 @@ RunService.RenderStepped:Connect(function(dt)
 	if S.pvpLoop and not S.alvoPvp and now <= S.tJanelaHit then regPvpHit() end
 	aplFoco()
 	restPulso()
+	if S.grabAssist and now <= S.tJanelaGrab then aplGrabAssist(false) end
 	if S.inv then updInv(0, now) end
 	S.syncEsp(now)
 	if S.hudLosango and S.hudStats and UI.stats then
@@ -1872,6 +1903,8 @@ RunService.RenderStepped:Connect(function(dt)
 end)
 
 RunService.Stepped:Connect(function()
+	local now = os.clock()
+	if S.grabAssist and now <= S.tJanelaGrab then aplGrabAssist(false) end
 	if S.inv then local c, r, h = getCR(LocalPlayer); if c and r then travarInv(c, r, h) end end
 end)
 
@@ -1893,8 +1926,9 @@ end)
 Players.PlayerRemoving:Connect(function(plr)
 	if S.alvoKa == plr then S.alvoKa = nil end
 	if S.alvoPvp == plr then S.alvoPvp = nil end
+	if S.alvoGrabTravado == plr then S.alvoGrabTravado = nil end
 	limpMarc(plr)
 	S.limpEspPlr(plr)
 end)
 
-print("[The VOID Painel] Grab Assist (G) ativo.")
+print("[The VOID Painel] Grab Assist (G) aprimorado ativo.")
