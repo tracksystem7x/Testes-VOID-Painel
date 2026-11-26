@@ -80,7 +80,7 @@ local KILL_AURA_PADRAO_ATIVO = false
 local FIGHTING_PADRAO_ATIVO = false
 local NO_ANIMATION_PADRAO_ATIVO = false
 local INVISIVEL_PADRAO_ATIVO = false
-local INVISIVEL_PROFUNDIDADE = EH_HIGHSCHOOL_RP and 5.5 or 5.2
+local INVISIVEL_PROFUNDIDADE = EH_HIGHSCHOOL_RP and 6.0 or 5.5
 local HUD_LOSANGO_PADRAO_VISIVEL = true
 local HUD_STATS_PADRAO_VISIVEL = true
 local SPEED_CFRAME_PADRAO_ATIVO = false
@@ -132,7 +132,9 @@ local yawSuperficieInvisivel = 0
 local ancoraCameraInvisivel = nil
 local snapshotTransparenciaInvisivel = {}
 local snapshotTamanhoInvisivel = {}
+local snapshotDecalsInvisivel = {}
 local snapshotDisplayDistHum = nil
+local snapshotDisplayNameHum = nil
 local hudLosangoVisivel = HUD_LOSANGO_PADRAO_VISIVEL
 local hudStatsVisivel = HUD_STATS_PADRAO_VISIVEL
 local speedCFrameAtivo = SPEED_CFRAME_PADRAO_ATIVO
@@ -150,6 +152,7 @@ local alvoKillAuraPlayer = nil
 local ultimoDisparoKillAuraTick = 0
 local ultimoDisparoAutoClickTick = 0
 local janelaRegistroHitAte = 0
+local ultimoSyncQuadraTick = 0
 
 local hitboxAtivo = HITBOX_PADRAO_ATIVO
 local hitboxVisivel = HITBOX_VISIVEL_PADRAO
@@ -217,9 +220,9 @@ local function setKillAuraEstado(novoEstado)
 end
 
 -- ==========================================
--- FIGHTING TOGGLE (SINCRONIZADO COM QUADRA, COMBATE E FERRAMENTAS)
+-- FIGHTING TOGGLE + DETECCAO DE QUADRA / COMBATE
 -- ==========================================
-local PALAVRAS_FIGHT = { "fight", "pvp", "combat", "incombat", "battle", "brawl", "arena", "court", "quadra", "ragdoll", "safe" }
+local PALAVRAS_FIGHT = { "fight", "pvp", "combat", "incombat", "battle", "brawl", "arena", "court", "quadra", "zone", "ragdoll", "safe" }
 
 local function nomeEhFight(nome)
 	if not nome or nome == "" then return false end
@@ -268,10 +271,29 @@ local function liberarFerramentasECombate(char, hum)
 	end
 end
 
+local function sinalizarZonaQuadraECombate(root, ativar)
+	if not ativar or not root then return end
+	local posRef = posSuperficieInvisivel or root.Position
+	pcall(function()
+		for _, desc in ipairs(workspace:GetDescendants()) do
+			if desc:IsA("BasePart") and nomeEhFight(desc.Name) then
+				local dist = (desc.Position - posRef).Magnitude
+				if dist <= 65 and typeof(firetouchinterest) == "function" then
+					pcall(function()
+						firetouchinterest(root, desc, 0)
+						firetouchinterest(root, desc, 1)
+					end)
+				end
+			end
+		end
+	end)
+end
+
 local function alternarEstadoFighting(ativar)
 	fightingAtivo = ativar
 	local char = LocalPlayer.Character
 	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	local root = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
 
 	local function ajustarContainer(container)
 		if not container then return end
@@ -308,6 +330,7 @@ local function alternarEstadoFighting(ativar)
 	ajustarContainer(LocalPlayer)
 	ajustarContainer(char)
 	liberarFerramentasECombate(char, hum)
+	sinalizarZonaQuadraECombate(root, ativar)
 
 	pcall(function()
 		for _, desc in ipairs(ReplicatedStorage:GetDescendants()) do
@@ -317,6 +340,7 @@ local function alternarEstadoFighting(ativar)
 					if ativar then
 						desc:FireServer(true, "Fighting")
 						desc:FireServer("Fighting")
+						desc:FireServer("Court")
 					end
 				end)
 			end
@@ -324,21 +348,27 @@ local function alternarEstadoFighting(ativar)
 	end)
 end
 
-local function garantirEstadoCombateParaAtaque()
+local function garantirEstadoCombateParaAtaque(agora)
 	if not fightingAtivo and not invisivelAtivo then return end
 	local char = LocalPlayer.Character
 	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	local root = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
 	liberarFerramentasECombate(char, hum)
-	if fightingAtivo then
-		pcall(function()
-			for _, desc in ipairs(ReplicatedStorage:GetDescendants()) do
-				if desc:IsA("RemoteEvent") and nomeEhFight(desc.Name) then
-					pcall(function()
-						desc:FireServer(true)
-					end)
+
+	if (agora or os.clock()) - ultimoSyncQuadraTick >= 0.4 then
+		ultimoSyncQuadraTick = agora or os.clock()
+		sinalizarZonaQuadraECombate(root, true)
+		if fightingAtivo then
+			pcall(function()
+				for _, desc in ipairs(ReplicatedStorage:GetDescendants()) do
+					if desc:IsA("RemoteEvent") and nomeEhFight(desc.Name) then
+						pcall(function()
+							desc:FireServer(true)
+						end)
+					end
 				end
-			end
-		end)
+			end)
+		end
 	end
 end
 
@@ -739,7 +769,7 @@ local function sincronizarNoAnimation()
 end
 
 -- ==========================================
--- INVISIVEL (FIO ULTRA-FINO SOB O CHAO + APENAS SEU NOME OCULTO + CAMERA ACIMA)
+-- INVISIVEL (FIO DEITADO SEM CABECA SOB O CHAO + APENAS SEU NOME OCULTO)
 -- ==========================================
 local function destruirAncoraCamera()
 	if ancoraCameraInvisivel then
@@ -769,36 +799,62 @@ local function garantirAncoraCamera()
 	return part
 end
 
-local function aplicarFioEOcultarApenasMeuNome(char, hum, ativar)
+local function aplicarFioDeitadoSemCabecaEOcultarApenasMeuNome(char, hum, ativar)
 	if not char then return end
 	if ativar then
-		if hum and snapshotDisplayDistHum == nil then
+		if hum then
+			if snapshotDisplayDistHum == nil then
+				pcall(function()
+					snapshotDisplayDistHum = {
+						NameDisplayDistance = hum.NameDisplayDistance,
+						HealthDisplayDistance = hum.HealthDisplayDistance
+					}
+				end)
+			end
+			if snapshotDisplayNameHum == nil then
+				pcall(function()
+					snapshotDisplayNameHum = hum.DisplayName
+				end)
+			end
 			pcall(function()
-				snapshotDisplayDistHum = {
-					NameDisplayDistance = hum.NameDisplayDistance,
-					HealthDisplayDistance = hum.HealthDisplayDistance
-				}
 				hum.NameDisplayDistance = Enum.HumanoidDisplayDistanceType.None
 				hum.HealthDisplayDistance = Enum.HumanoidDisplayDistanceType.None
+				if hum.DisplayName ~= "" then
+					hum.DisplayName = ""
+				end
 			end)
 		end
 
 		for _, desc in ipairs(char:GetDescendants()) do
 			if desc:IsA("BasePart") then
+				if snapshotTamanhoInvisivel[desc] == nil then
+					snapshotTamanhoInvisivel[desc] = desc.Size
+				end
 				if desc.Name ~= "HumanoidRootPart" then
 					if snapshotTransparenciaInvisivel[desc] == nil then
 						snapshotTransparenciaInvisivel[desc] = desc.LocalTransparencyModifier
 					end
 					pcall(function()
-						desc.LocalTransparencyModifier = math.max(desc.LocalTransparencyModifier, 0.35)
+						desc.LocalTransparencyModifier = 1
+						desc.CastShadow = false
+						desc.CanCollide = false
 					end)
 				end
-				if snapshotTamanhoInvisivel[desc] == nil then
-					snapshotTamanhoInvisivel[desc] = desc.Size
+				pcall(function()
+					if desc.Name == "Head" then
+						desc.Size = Vector3.new(0.01, 0.01, 0.01)
+					elseif desc.Name == "HumanoidRootPart" then
+						desc.Size = Vector3.new(0.05, 0.01, 0.05)
+					else
+						desc.Size = Vector3.new(0.02, 0.01, 0.02)
+					end
+				end)
+			elseif desc:IsA("Decal") or desc:IsA("Texture") then
+				if snapshotDecalsInvisivel[desc] == nil then
+					snapshotDecalsInvisivel[desc] = desc.Transparency
 				end
 				pcall(function()
-					local sz = snapshotTamanhoInvisivel[desc]
-					desc.Size = Vector3.new(math.max(sz.X * 0.12, 0.05), 0.02, math.max(sz.Z * 0.12, 0.05))
+					desc.Transparency = 1
 				end)
 			end
 		end
@@ -821,12 +877,27 @@ local function aplicarFioEOcultarApenasMeuNome(char, hum, ativar)
 		end
 		table.clear(snapshotTamanhoInvisivel)
 
-		if hum and snapshotDisplayDistHum then
+		for decal, origTransp in pairs(snapshotDecalsInvisivel) do
+			if decal and decal.Parent then
+				pcall(function()
+					decal.Transparency = origTransp
+				end)
+			end
+		end
+		table.clear(snapshotDecalsInvisivel)
+
+		if hum then
 			pcall(function()
-				hum.NameDisplayDistance = snapshotDisplayDistHum.NameDisplayDistance
-				hum.HealthDisplayDistance = snapshotDisplayDistHum.HealthDisplayDistance
+				if snapshotDisplayDistHum then
+					hum.NameDisplayDistance = snapshotDisplayDistHum.NameDisplayDistance
+					hum.HealthDisplayDistance = snapshotDisplayDistHum.HealthDisplayDistance
+				end
+				if snapshotDisplayNameHum ~= nil then
+					hum.DisplayName = snapshotDisplayNameHum
+				end
 			end)
 			snapshotDisplayDistHum = nil
+			snapshotDisplayNameHum = nil
 		end
 	end
 end
@@ -942,19 +1013,19 @@ local function atualizarInvisivelSubsolo(dt)
 
 	local alturaLimiteVoid = workspace.FallenPartsDestroyHeight + 25
 	local yAbaixo = math.max(posSuperficieInvisivel.Y - INVISIVEL_PROFUNDIDADE, alturaLimiteVoid)
-	local cfFioAbaixo = CFrame.new(posSuperficieInvisivel.X, yAbaixo, posSuperficieInvisivel.Z)
+	local cfFioDeitado = CFrame.new(posSuperficieInvisivel.X, yAbaixo, posSuperficieInvisivel.Z)
 		* CFrame.fromEulerAnglesYXZ(0, yawSuperficieInvisivel, 0)
-		* CFrame.Angles(math.rad(88), 0, 0)
+		* CFrame.Angles(math.rad(90), 0, 0)
 
 	pcall(function()
 		if hum.Sit then hum.Sit = false end
 		if hum.PlatformStand then hum.PlatformStand = false end
 		root.AssemblyLinearVelocity = Vector3.zero
 		root.AssemblyAngularVelocity = Vector3.zero
-		root.CFrame = cfFioAbaixo
+		root.CFrame = cfFioDeitado
 	end)
 
-	aplicarFioEOcultarApenasMeuNome(char, hum, true)
+	aplicarFioDeitadoSemCabecaEOcultarApenasMeuNome(char, hum, true)
 	sincronizarCameraInvisivel(hum, posSuperficieInvisivel)
 end
 
@@ -966,7 +1037,7 @@ local function setInvisivelEstado(novoEstado)
 
 	if not invisivelAtivo then
 		destruirAncoraCamera()
-		aplicarFioEOcultarApenasMeuNome(char, hum, false)
+		aplicarFioDeitadoSemCabecaEOcultarApenasMeuNome(char, hum, false)
 		if root and posSuperficieInvisivel then
 			local cfVolta = CFrame.new(posSuperficieInvisivel.X, posSuperficieInvisivel.Y + 1.2, posSuperficieInvisivel.Z)
 				* CFrame.fromEulerAnglesYXZ(0, yawSuperficieInvisivel, 0)
@@ -989,8 +1060,11 @@ local function setInvisivelEstado(novoEstado)
 			local _, yawAtual, _ = root.CFrame:ToEulerAnglesYXZ()
 			yawSuperficieInvisivel = yawAtual
 		end
-		aplicarFioEOcultarApenasMeuNome(char, hum, true)
+		aplicarFioDeitadoSemCabecaEOcultarApenasMeuNome(char, hum, true)
 		atualizarInvisivelSubsolo(0.016)
+		if fightingAtivo then
+			alternarEstadoFighting(true)
+		end
 	end
 end
 
@@ -1034,7 +1108,9 @@ local function recuperarEstadoAposQueda(novoChar)
 	destruirAncoraCamera()
 	table.clear(snapshotTransparenciaInvisivel)
 	table.clear(snapshotTamanhoInvisivel)
+	table.clear(snapshotDecalsInvisivel)
 	snapshotDisplayDistHum = nil
+	snapshotDisplayNameHum = nil
 	local humNovo = novoChar and novoChar:FindFirstChildOfClass("Humanoid")
 	sincronizarCameraInvisivel(humNovo, nil)
 	janelaRegistroHitAte = 0
@@ -1610,6 +1686,7 @@ end
 -- ==========================================
 local function desviarMiraSeAmigoNaFrente(meuRoot)
 	if not meuRoot then return end
+	if invisivelAtivo then return end
 	if ativo and targetLockHabilitadoNoPainel then return end
 	if UserInputService:GetFocusedTextBox() then return end
 
@@ -1708,7 +1785,7 @@ end
 -- BACK / COSTAS (COLA ATRAS DO INIMIGO OLHANDO PARA AS COSTAS DELE)
 -- ==========================================
 local function aplicarBackCostas()
-	if not backCostasAtivo then return end
+	if not backCostasAtivo or invisivelAtivo then return end
 	if UserInputService:GetFocusedTextBox() then return end
 
 	local char, meuRoot, hum = getCharAndRoot(LocalPlayer)
@@ -1737,7 +1814,7 @@ local function aplicarBackCostas()
 end
 
 local function obterAlcanceAutoClick()
-	local raioBase = DISTANCIA_MAXIMA + (invisivelAtivo and 8 or 0)
+	local raioBase = DISTANCIA_MAXIMA + (invisivelAtivo and 10 or 0)
 	if hitboxAtivo then
 		local raioHitbox = hitboxSize + 6
 		if raioHitbox > raioBase then
@@ -1788,8 +1865,8 @@ local function executarCliqueRapido()
 	end)
 end
 
-local function dispararPulsoAtaque(char, meuRoot)
-	garantirEstadoCombateParaAtaque()
+local function dispararPulsoAtaque(char, meuRoot, agora)
+	garantirEstadoCombateParaAtaque(agora)
 	if meuRoot and not pvpFocusLoopAtivo then
 		desviarMiraSeAmigoNaFrente(meuRoot)
 	end
@@ -1818,7 +1895,7 @@ local function processarKillAuraFrame(agora)
 		return false
 	end
 
-	local alcanceEfetivo = hitboxAtivo and math.max(DISTANCIA_KILL_AURA, hitboxSize + 6) or (DISTANCIA_KILL_AURA + (invisivelAtivo and 8 or 0))
+	local alcanceEfetivo = hitboxAtivo and math.max(DISTANCIA_KILL_AURA, hitboxSize + 6) or (DISTANCIA_KILL_AURA + (invisivelAtivo and 10 or 0))
 	local alvoProximo = obterAlvoKillAuraPersistente(meuRoot, alcanceEfetivo)
 	if not alvoProximo then
 		pulsoMiraAte = 0
@@ -1829,7 +1906,7 @@ local function processarKillAuraFrame(agora)
 
 	ultimoDisparoKillAuraTick = agora
 
-	if KILL_AURA_PULSO_ALVO then
+	if KILL_AURA_PULSO_ALVO and not invisivelAtivo then
 		local _, yawAtual, _ = meuRoot.CFrame:ToEulerAnglesYXZ()
 		if yawAntesPulso == nil then
 			yawAntesPulso = yawAtual
@@ -1847,7 +1924,7 @@ local function processarKillAuraFrame(agora)
 	end
 
 	for _ = 1, RAJADA_KILL_AURA do
-		dispararPulsoAtaque(char, meuRoot)
+		dispararPulsoAtaque(char, meuRoot, agora)
 	end
 
 	return true
@@ -1868,7 +1945,7 @@ local function processarAutoClickFrame(agora, killAuraAtacouNesteFrame)
 	local char, meuRoot = getCharAndRoot(LocalPlayer)
 	if meuRoot and haAlvoNoAlcanceAutoClick(meuRoot) then
 		ultimoDisparoAutoClickTick = agora
-		dispararPulsoAtaque(char, meuRoot)
+		dispararPulsoAtaque(char, meuRoot, agora)
 	end
 end
 
@@ -2772,7 +2849,7 @@ local function aplicarFocoNoAlvo()
 	end
 	atualizarVisual(ativo)
 
-	if not ativo or not targetLockHabilitadoNoPainel then
+	if not ativo or not targetLockHabilitadoNoPainel or invisivelAtivo then
 		alvoAtual = nil
 		return
 	end
