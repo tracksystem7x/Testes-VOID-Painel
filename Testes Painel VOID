@@ -36,6 +36,8 @@ local CFG = {
 	DIST_GRAB_ASSIST = 70.0,
 	GRAB_PUXAR_DIST = 28.0,
 	GRAB_JANELA_ALIGN = 0.22,
+	SPAM_GRAB_DELAY = 0.045,
+	SPAM_GRAB_RAJADA = 3,
 	MARGEM_TROCA = 3.5,
 	FIRMEZA_GIRO = 1.0,
 	ORBITAR = false,
@@ -84,6 +86,8 @@ local S = {
 	pvpLoop = false,
 	backCostas = false,
 	grabAssist = true,
+	spamGrab = false,
+	tSpamGrab = 0,
 	grabDist = math.clamp(math.floor((CFG.DIST_GRAB_ASSIST or 70) + 0.5), 1, 100),
 	grabPullDist = math.clamp(math.floor((CFG.GRAB_PUXAR_DIST or 28) + 0.5), 1, 100),
 	antiRag = EH_HIGHSCHOOL_RP and true or false,
@@ -1049,7 +1053,7 @@ local function getPvpAlvo(mr)
 end
 
 -- ==========================================
--- GRAB ASSIST (TECLA G): ALINHAMENTO + APROXIMACAO CURTA EM FOCO OU MAIS PROXIMO
+-- GRAB ASSIST (TECLA G) + SPAM GRAB (RAJADA)
 -- ==========================================
 local function escolherAlvoGrab(mr, rMax, candPreferido)
 	local refPos = (S.inv and S.posInv) or mr.Position
@@ -1068,7 +1072,6 @@ local function escolherAlvoGrab(mr, rMax, candPreferido)
 		if ra then return ra, candPreferido, d end
 	end
 
-	-- 1. Prioriza quem ja esta marcado/focado (PvP / Kill Aura / Target Lock)
 	for _, cand in ipairs({ S.alvoPvp, S.alvoKa }) do
 		local ra, d = validarPlr(cand)
 		if ra then return ra, cand, d end
@@ -1082,7 +1085,6 @@ local function escolherAlvoGrab(mr, rMax, candPreferido)
 		end
 	end
 
-	-- 2. Se houver filtro Focus, prioriza o mais proximo dentro do Focus
 	if temFocus() then
 		local bestR, bestP, bestD = nil, nil, math.huge
 		for _, plr in ipairs(Players:GetPlayers()) do
@@ -1094,7 +1096,6 @@ local function escolherAlvoGrab(mr, rMax, candPreferido)
 		if bestR then return bestR, bestP, bestD end
 	end
 
-	-- 3. Caso contrario, pega o jogador elegivel mais proximo (ignorando AMG)
 	local bestR, bestP, bestD = nil, nil, math.huge
 	for _, plr in ipairs(Players:GetPlayers()) do
 		local ra, d = validarPlr(plr)
@@ -1103,7 +1104,19 @@ local function escolherAlvoGrab(mr, rMax, candPreferido)
 	return bestR, bestP, bestD
 end
 
-local function aplGrabAssist(forcarNovoAlvo)
+local function dispararRajadaGrab(rajada)
+	local qtd = math.max(1, rajada or 1)
+	ignHit = true
+	for _ = 1, qtd do
+		pcall(function()
+			VirtualInputManager:SendKeyEvent(true, CFG.KEY_ESPECIAL, false, game)
+			VirtualInputManager:SendKeyEvent(false, CFG.KEY_ESPECIAL, false, game)
+		end)
+	end
+	ignHit = false
+end
+
+local function aplGrabAssist(forcarNovoAlvo, moverPosicao)
 	if not S.grabAssist then return end
 	local ch, mr, hum = getCR(LocalPlayer)
 	if not ch or not mr then return end
@@ -1128,7 +1141,7 @@ local function aplGrabAssist(forcarNovoAlvo)
 	local yawAlvo = math.atan2(-dx, -dz)
 	local puxar = math.clamp(S.grabPullDist or CFG.GRAB_PUXAR_DIST or 28, 1, 100)
 	local novaPos = refPos
-	if dist and dist > puxar then
+	if moverPosicao ~= false and dist and dist > puxar then
 		local dirX, dirZ = dx / horizDist, dz / horizDist
 		local avanco = math.min(dist - puxar, horizDist - 1.5)
 		if avanco > 0.05 then
@@ -1138,7 +1151,7 @@ local function aplGrabAssist(forcarNovoAlvo)
 
 	pcall(function()
 		if S.inv and S.posInv then
-			S.posInv = novaPos
+			if moverPosicao ~= false then S.posInv = novaPos end
 			S.yawInv = yawAlvo
 			travarInv(ch, mr, hum)
 		else
@@ -1146,6 +1159,24 @@ local function aplGrabAssist(forcarNovoAlvo)
 			mr.CFrame = CFrame.new(novaPos.X, mr.Position.Y, novaPos.Z) * CFrame.fromEulerAnglesYXZ(0, yawAlvo, 0)
 		end
 	end)
+end
+
+local function procSpamGrab(now)
+	if not S.spamGrab or UserInputService:GetFocusedTextBox() then return end
+	if (now - S.tSpamGrab) < (CFG.SPAM_GRAB_DELAY or 0.045) then return end
+	local _, mr = getCR(LocalPlayer)
+	if not mr then return end
+	local rMax = math.clamp(S.grabDist or CFG.DIST_GRAB_ASSIST or 70, 1, 100)
+	local alvoRoot, alvoPlr, dist = escolherAlvoGrab(mr, rMax, S.alvoGrabTravado)
+	if not alvoRoot or not alvoPlr or not dist then return end
+
+	local limiteProximidade = math.max(12, math.min(rMax, (S.grabPullDist or 28) * 0.65))
+	if dist <= limiteProximidade then
+		S.tSpamGrab = now
+		S.alvoGrabTravado = alvoPlr
+		aplGrabAssist(false, false)
+		dispararRajadaGrab(CFG.SPAM_GRAB_RAJADA or 3)
+	end
 end
 
 local function desviarAmg(mr)
@@ -1666,7 +1697,7 @@ local function criarPainel()
 	gui.Name, gui.ResetOnSpawn, gui.Parent = "UniversalCombatPanel", false, parentGui
 
 	local fr = Instance.new("Frame")
-	fr.Size, fr.Position, fr.BackgroundColor3 = UDim2.new(0, 200, 0, 555), CFG.POS_PAINEL, Color3.fromRGB(20, 20, 25)
+	fr.Size, fr.Position, fr.BackgroundColor3 = UDim2.new(0, 200, 0, 575), UDim2.new(1, -214, 1, -585), Color3.fromRGB(20, 20, 25)
 	fr.BorderSizePixel, fr.Active, fr.Parent = 0, true, gui
 	Instance.new("UICorner", fr).CornerRadius = UDim.new(0, 6)
 	brd(fr, 1.5)
@@ -1707,25 +1738,26 @@ local function criarPainel()
 	for n, tb in pairs(tBtns) do tb.MouseButton1Click:Connect(function() selAba(n) end) end
 
 	local pC = tPags.Combat
-	local bAuto = mkBtn(pC, "AutoClick VOID (E): OFF", UDim2.new(0, 8, 0, 0), UDim2.new(1, -16, 0, 18), 11)
-	local bLock = mkBtn(pC, S.lockOn and "Target Lock: ON" or "Target Lock: OFF", UDim2.new(0, 8, 0, 20), UDim2.new(1, -16, 0, 18), 11); bLock.BackgroundColor3 = S.lockOn and CFG.ROXO_ON or CFG.CINZA
-	local bPvp = mkBtn(pC, S.pvpLoop and "PvP Focus Loop: ON" or "PvP Focus Loop: OFF", UDim2.new(0, 8, 0, 40), UDim2.new(1, -16, 0, 18), 11); bPvp.BackgroundColor3 = S.pvpLoop and CFG.ROXO_ON or CFG.CINZA
-	local bCost = mkBtn(pC, S.backCostas and "Back / Costas: ON" or "Back / Costas: OFF", UDim2.new(0, 8, 0, 60), UDim2.new(0.5, -10, 0, 18), 10); bCost.BackgroundColor3 = S.backCostas and CFG.ROXO_ON or CFG.CINZA
-	local bGrabAssist = mkBtn(pC, S.grabAssist and "Grab (G): ON" or "Grab (G): OFF", UDim2.new(0.5, 2, 0, 60), UDim2.new(0.5, -10, 0, 18), 10); bGrabAssist.BackgroundColor3 = S.grabAssist and CFG.ROXO_ON or CFG.CINZA
-	local slGrabDist = mkSlider(pC, "Grab Alcance: ", 80, 1, 100, S.grabDist, function(v) S.grabDist = v end)
-	local slGrabPull = mkSlider(pC, "Puxar Dist: ", 108, 1, 100, S.grabPullDist, function(v) S.grabPullDist = v end)
-	local bRag = mkBtn(pC, S.antiRag and "Anti-Ragdoll: ON" or "Anti-Ragdoll: OFF", UDim2.new(0, 8, 0, 138), UDim2.new(1, -16, 0, 18), 11); bRag.BackgroundColor3 = S.antiRag and CFG.ROXO_ON or CFG.CINZA
-	local bGrab = mkBtn(pC, S.antiGrab and "Anti Grab Rag: ON" or "Anti Grab Rag: OFF", UDim2.new(0, 8, 0, 158), UDim2.new(1, -16, 0, 18), 11); bGrab.BackgroundColor3 = S.antiGrab and CFG.ROXO_ON or CFG.CINZA
-	local bDtp = mkBtn(pC, S.deathTp and "Death TP: ON" or "Death TP: OFF", UDim2.new(0, 8, 0, 178), UDim2.new(1, -16, 0, 18), 11); bDtp.BackgroundColor3 = S.deathTp and CFG.ROXO_ON or CFG.CINZA
-	local bNs = mkBtn(pC, S.noSlow and "No Slow: ON" or "No Slow: OFF", UDim2.new(0, 8, 0, 198), UDim2.new(1, -16, 0, 18), 11); bNs.BackgroundColor3 = S.noSlow and CFG.ROXO_ON or CFG.CINZA
-	local bKa = mkBtn(pC, S.ka and "Kill Aura (Q): ON" or "Kill Aura (Q): OFF", UDim2.new(0, 8, 0, 218), UDim2.new(1, -16, 0, 18), 11); bKa.BackgroundColor3 = S.ka and CFG.ROXO_ON or CFG.CINZA
-	local bFgt = mkBtn(pC, S.fighting and "Disable Fighting" or "Enable Fighting", UDim2.new(0, 8, 0, 238), UDim2.new(1, -16, 0, 18), 11); bFgt.BackgroundColor3 = S.fighting and CFG.ROXO_ON or CFG.CINZA
-	local bHit = mkBtn(pC, S.hitOn and "Hitbox: ON" or "Hitbox: OFF", UDim2.new(0, 8, 0, 258), UDim2.new(0.5, -10, 0, 18), 10); bHit.BackgroundColor3 = S.hitOn and CFG.ROXO_ON or CFG.CINZA
-	local bVis = mkBtn(pC, S.hitVis and "Visivel: Sim" or "Visivel: Nao", UDim2.new(0.5, 2, 0, 258), UDim2.new(0.5, -10, 0, 18), 10); bVis.BackgroundColor3 = S.hitVis and CFG.ROXO_ON or CFG.CINZA
-	local slSize = mkSlider(pC, "Size: ", 279, 3, CFG.HIT_MAX, S.hitSize, function(v) S.hitSize = v; syncHitMarc() end)
-	local bxAmg = mkBox(pC, "AMG (ex: ana pedro)...", UDim2.new(0, 8, 0, 310), 18)
-	local bxFoc = mkBox(pC, "Focus (ex: alvo1 alvo2)...", UDim2.new(0, 8, 0, 330), 18)
-	local bxBck = mkBox(pC, "Back / Costas (quem usar)...", UDim2.new(0, 8, 0, 350), 18)
+	local bAuto = mkBtn(pC, "AutoClick VOID (E): OFF", UDim2.new(0, 8, 0, 0), UDim2.new(1, -16, 0, 17), 11)
+	local bLock = mkBtn(pC, S.lockOn and "Target Lock: ON" or "Target Lock: OFF", UDim2.new(0, 8, 0, 19), UDim2.new(1, -16, 0, 17), 11); bLock.BackgroundColor3 = S.lockOn and CFG.ROXO_ON or CFG.CINZA
+	local bPvp = mkBtn(pC, S.pvpLoop and "PvP Focus Loop: ON" or "PvP Focus Loop: OFF", UDim2.new(0, 8, 0, 38), UDim2.new(1, -16, 0, 17), 11); bPvp.BackgroundColor3 = S.pvpLoop and CFG.ROXO_ON or CFG.CINZA
+	local bCost = mkBtn(pC, S.backCostas and "Back / Costas: ON" or "Back / Costas: OFF", UDim2.new(0, 8, 0, 57), UDim2.new(0.5, -10, 0, 17), 10); bCost.BackgroundColor3 = S.backCostas and CFG.ROXO_ON or CFG.CINZA
+	local bGrabAssist = mkBtn(pC, S.grabAssist and "Grab (G): ON" or "Grab (G): OFF", UDim2.new(0.5, 2, 0, 57), UDim2.new(0.5, -10, 0, 17), 10); bGrabAssist.BackgroundColor3 = S.grabAssist and CFG.ROXO_ON or CFG.CINZA
+	local bSpamGrab = mkBtn(pC, S.spamGrab and "Spam Grab: ON" or "Spam Grab: OFF", UDim2.new(0, 8, 0, 76), UDim2.new(1, -16, 0, 17), 10); bSpamGrab.BackgroundColor3 = S.spamGrab and CFG.ROXO_ON or CFG.CINZA
+	local slGrabDist = mkSlider(pC, "Grab Alcance: ", 96, 1, 100, S.grabDist, function(v) S.grabDist = v end)
+	local slGrabPull = mkSlider(pC, "Puxar Dist: ", 124, 1, 100, S.grabPullDist, function(v) S.grabPullDist = v end)
+	local bRag = mkBtn(pC, S.antiRag and "Anti-Ragdoll: ON" or "Anti-Ragdoll: OFF", UDim2.new(0, 8, 0, 154), UDim2.new(1, -16, 0, 17), 11); bRag.BackgroundColor3 = S.antiRag and CFG.ROXO_ON or CFG.CINZA
+	local bGrab = mkBtn(pC, S.antiGrab and "Anti Grab Rag: ON" or "Anti Grab Rag: OFF", UDim2.new(0, 8, 0, 173), UDim2.new(1, -16, 0, 17), 11); bGrab.BackgroundColor3 = S.antiGrab and CFG.ROXO_ON or CFG.CINZA
+	local bDtp = mkBtn(pC, S.deathTp and "Death TP: ON" or "Death TP: OFF", UDim2.new(0, 8, 0, 192), UDim2.new(1, -16, 0, 17), 11); bDtp.BackgroundColor3 = S.deathTp and CFG.ROXO_ON or CFG.CINZA
+	local bNs = mkBtn(pC, S.noSlow and "No Slow: ON" or "No Slow: OFF", UDim2.new(0, 8, 0, 211), UDim2.new(1, -16, 0, 17), 11); bNs.BackgroundColor3 = S.noSlow and CFG.ROXO_ON or CFG.CINZA
+	local bKa = mkBtn(pC, S.ka and "Kill Aura (Q): ON" or "Kill Aura (Q): OFF", UDim2.new(0, 8, 0, 230), UDim2.new(1, -16, 0, 17), 11); bKa.BackgroundColor3 = S.ka and CFG.ROXO_ON or CFG.CINZA
+	local bFgt = mkBtn(pC, S.fighting and "Disable Fighting" or "Enable Fighting", UDim2.new(0, 8, 0, 249), UDim2.new(1, -16, 0, 17), 11); bFgt.BackgroundColor3 = S.fighting and CFG.ROXO_ON or CFG.CINZA
+	local bHit = mkBtn(pC, S.hitOn and "Hitbox: ON" or "Hitbox: OFF", UDim2.new(0, 8, 0, 268), UDim2.new(0.5, -10, 0, 17), 10); bHit.BackgroundColor3 = S.hitOn and CFG.ROXO_ON or CFG.CINZA
+	local bVis = mkBtn(pC, S.hitVis and "Visivel: Sim" or "Visivel: Nao", UDim2.new(0.5, 2, 0, 268), UDim2.new(0.5, -10, 0, 17), 10); bVis.BackgroundColor3 = S.hitVis and CFG.ROXO_ON or CFG.CINZA
+	local slSize = mkSlider(pC, "Size: ", 288, 3, CFG.HIT_MAX, S.hitSize, function(v) S.hitSize = v; syncHitMarc() end)
+	local bxAmg = mkBox(pC, "AMG (ex: ana pedro)...", UDim2.new(0, 8, 0, 318), 17)
+	local bxFoc = mkBox(pC, "Focus (ex: alvo1 alvo2)...", UDim2.new(0, 8, 0, 337), 17)
+	local bxBck = mkBox(pC, "Back / Costas (quem usar)...", UDim2.new(0, 8, 0, 356), 17)
 
 	bxAmg:GetPropertyChangedSignal("Text"):Connect(function() S.amg = bxAmg.Text; S.alvoKa = nil; if S.alvoPvp and ehAmg(S.alvoPvp) then S.alvoPvp = nil end; syncHitMarc() end)
 	bxFoc:GetPropertyChangedSignal("Text"):Connect(function() S.focus = bxFoc.Text; S.alvoKa = nil; syncHitMarc() end)
@@ -1810,6 +1842,19 @@ local function criarPainel()
 	bPvp.MouseButton1Click:Connect(function() S.pvpLoop = not S.pvpLoop; bPvp.Text = S.pvpLoop and "PvP Focus Loop: ON" or "PvP Focus Loop: OFF"; bPvp.BackgroundColor3 = S.pvpLoop and CFG.ROXO_ON or CFG.CINZA; S.alvoPvp, S.alvo, S.tJanelaHit = nil, nil, 0; syncHitMarc() end)
 	bCost.MouseButton1Click:Connect(function() S.backCostas = not S.backCostas; bCost.Text = S.backCostas and "Back / Costas: ON" or "Back / Costas: OFF"; bCost.BackgroundColor3 = S.backCostas and CFG.ROXO_ON or CFG.CINZA end)
 	bGrabAssist.MouseButton1Click:Connect(function() S.grabAssist = not S.grabAssist; bGrabAssist.Text = S.grabAssist and "Grab (G): ON" or "Grab (G): OFF"; bGrabAssist.BackgroundColor3 = S.grabAssist and CFG.ROXO_ON or CFG.CINZA end)
+	bSpamGrab.MouseButton1Click:Connect(function()
+		S.spamGrab = not S.spamGrab
+		bSpamGrab.Text = S.spamGrab and "Spam Grab: ON" or "Spam Grab: OFF"
+		bSpamGrab.BackgroundColor3 = S.spamGrab and CFG.ROXO_ON or CFG.CINZA
+		S.tSpamGrab = 0
+		if S.spamGrab then
+			S.grabAssist = true
+			bGrabAssist.Text = "Grab (G): ON"
+			bGrabAssist.BackgroundColor3 = CFG.ROXO_ON
+			aplGrabAssist(true, false)
+			dispararRajadaGrab(CFG.SPAM_GRAB_RAJADA or 3)
+		end
+	end)
 	bRag.MouseButton1Click:Connect(function() S.antiRag = not S.antiRag; bRag.Text = S.antiRag and "Anti-Ragdoll: ON" or "Anti-Ragdoll: OFF"; bRag.BackgroundColor3 = S.antiRag and CFG.ROXO_ON or CFG.CINZA end)
 	bGrab.MouseButton1Click:Connect(function() S.antiGrab = not S.antiGrab; bGrab.Text = S.antiGrab and "Anti Grab Rag: ON" or "Anti Grab Rag: OFF"; bGrab.BackgroundColor3 = S.antiGrab and CFG.ROXO_ON or CFG.CINZA end)
 	bDtp.MouseButton1Click:Connect(function() S.deathTp = not S.deathTp; bDtp.Text = S.deathTp and "Death TP: ON" or "Death TP: OFF"; bDtp.BackgroundColor3 = S.deathTp and CFG.ROXO_ON or CFG.CINZA end)
@@ -1829,7 +1874,7 @@ local function criarPainel()
 	bEspH.MouseButton1Click:Connect(function() S.espHp = not S.espHp; bEspH.Text = S.espHp and "ESP Health: ON" or "ESP Health: OFF"; bEspH.BackgroundColor3 = S.espHp and CFG.ROXO_ON or CFG.CINZA; tEsp = 0; S.syncEsp(os.clock()) end)
 	bEspB.MouseButton1Click:Connect(function() S.espBody = not S.espBody; bEspB.Text = S.espBody and "ESP Body: ON" or "ESP Body: OFF"; bEspB.BackgroundColor3 = S.espBody and CFG.ROXO_ON or CFG.CINZA; tEsp = 0; S.syncEsp(os.clock()) end)
 	bOpt.MouseButton1Click:Connect(function() setOptFps(not S.boostFps); bOpt.Text = S.boostFps and "Otimizar FPS / Rede: ON" or "Otimizar FPS / Rede: OFF"; bOpt.BackgroundColor3 = S.boostFps and CFG.ROXO_ON or CFG.CINZA end)
-	bRst.MouseButton1Click:Connect(function() fr.Position = CFG.POS_PAINEL end)
+	bRst.MouseButton1Click:Connect(function() fr.Position = UDim2.new(1, -214, 1, -585) end)
 
 	selAba("Combat")
 	UI.painel, UI.btnAuto, UI.btnKa, UI.btnInv = fr, bAuto, bKa, bIv
@@ -1869,7 +1914,7 @@ UserInputService.InputBegan:Connect(function(inp, gp)
 	if gp or UserInputService:GetFocusedTextBox() then return end
 	if inp.KeyCode == CFG.KEY_ESPECIAL then
 		tEsp = os.clock()
-		aplGrabAssist(true)
+		aplGrabAssist(true, true)
 	elseif inp.KeyCode == CFG.KEY_KA then setKa(not S.ka)
 	elseif inp.KeyCode == CFG.KEY_ATALHO then setLock(not S.ativo)
 	elseif inp.KeyCode == CFG.KEY_PAINEL and UI.painel then UI.painel.Visible = not UI.painel.Visible
@@ -1889,7 +1934,7 @@ RunService.RenderStepped:Connect(function(dt)
 	if S.pvpLoop and not S.alvoPvp and now <= S.tJanelaHit then regPvpHit() end
 	aplFoco()
 	restPulso()
-	if S.grabAssist and now <= S.tJanelaGrab then aplGrabAssist(false) end
+	if S.grabAssist and now <= S.tJanelaGrab then aplGrabAssist(false, true) end
 	if S.inv then updInv(0, now) end
 	S.syncEsp(now)
 	if S.hudLosango and S.hudStats and UI.stats then
@@ -1908,13 +1953,14 @@ end)
 
 RunService.Stepped:Connect(function()
 	local now = os.clock()
-	if S.grabAssist and now <= S.tJanelaGrab then aplGrabAssist(false) end
+	if S.grabAssist and now <= S.tJanelaGrab then aplGrabAssist(false, true) end
 	if S.inv then local c, r, h = getCR(LocalPlayer); if c and r then travarInv(c, r, h) end end
 end)
 
 RunService.Heartbeat:Connect(function(dt)
 	local now = os.clock()
 	aplCostas(); aplNoSlow(); aplJump(); aplAntiRag(); aplAntiGrab(); aplSpeed(dt)
+	procSpamGrab(now)
 	local kaAtk = procKa(now)
 	procClk(now, kaAtk)
 	updInv(dt, now)
@@ -1935,4 +1981,4 @@ Players.PlayerRemoving:Connect(function(plr)
 	S.limpEspPlr(plr)
 end)
 
-print("[The VOID Painel] Sliders Grab Alcance e Puxar Dist (1-100) ativos em Combat.")
+print("[The VOID Painel] Spam Grab adicionado na aba Combat.")
