@@ -38,16 +38,18 @@ local CFG = {
 	ORBITAR = false,
 	DIST_COSTAS = 3.2,
 	DIST_MAX_COSTAS = 45,
-	DIST_KA = EH_HIGHSCHOOL_RP and 28 or 32,
-	MARGEM_KA = 8,
-	DELAY_KA_NORM = 0.008,
-	RAJADA_KA_NORM = 3,
-	DELAY_CLK_NORM = 0.0001,
-	DELAY_KA_INV = 0.02,
-	RAJADA_KA_INV = 4,
-	DELAY_CLK_INV = 0.02,
+	-- Alcance base ajustado para nao pegar gente longe e concentrar no PvP
+	DIST_KA = EH_HIGHSCHOOL_RP and 20 or 22,
+	MARGEM_KA = 4,
+	-- Intervalos calibrados para evitar "ghost swings" por excesso de cliques
+	DELAY_KA_NORM = 0.045,
+	RAJADA_KA_NORM = 1,
+	DELAY_CLK_NORM = 0.04,
+	DELAY_KA_INV = 0.055,
+	RAJADA_KA_INV = 1,
+	DELAY_CLK_INV = 0.05,
 	KA_PULSO = false,
-	DUR_PULSO = 0.008,
+	DUR_PULSO = 0.015,
 	AUTOCLICK_JUNTO = true,
 	WS_BASE = 16,
 	JP_BASE = 50,
@@ -59,8 +61,8 @@ local CFG = {
 	MODOS_SPEED = { "CFrame", "WalkSpeed", "AssemblyVel", "Hybrid (CF+WS)" },
 	JUMP_MIN = 1,
 	JUMP_MAX = 1000,
-	HIT_DEF = 12,
-	HIT_MAX = 27,
+	HIT_DEF = 20,
+	HIT_MAX = 30,
 	HIT_TRANS = 0.965,
 	COR_HIT = Color3.fromRGB(220, 55, 55),
 	ROXO = Color3.fromRGB(155, 65, 255),
@@ -121,461 +123,6 @@ local S = {
 	backFilt = "",
 	tEsp = 0,
 	tEspSize = 0,
-	tEspTick = 0,
-	tEspSync = 0,
-	tEspRef = 0,
-	tEspLoop = 0,
-	tEspNow = 0,
-	tEspLast = 0,
-	espOn = false,
-	espName = true,
-	espHp = true,
-	espBody = true,
-	tEspUpd = 0,
-	tEspRun = 0,
-	tEspFrame = 0,
-	tEspStep = 0,
-	tEspBeat = 0,
-	tEspClean = 0,
-	tEspDraw = 0,
-	tEspCheck = 0,
-	tEspRefresh = 0,
-	tEspPass = 0,
-	tEspSched = 0,
-	tEspMark = 0,
-	tEspPol = 0,
-	tEspPing = 0,
-	tEspFps = 0,
-	tEspIdle = 0,
-	tEspAct = 0,
-	tEspJob = 0,
-	tEspQueue = 0,
-	tEspBatch = 0,
-	tEspWave = 0,
-	tEspPulse = 0,
-	tEspSlot = 0,
-	tEspGuard = 0,
-	tEspWatch = 0,
-	tEspSweep = 0,
-	tEspCycle = 0,
-	tEspPhase = 0,
-	tEspStage = 0,
-	tEspBeat2 = 0,
-	tEspSync2 = 0,
-	tEspTick2 = 0,
-	tEspRun2 = 0,
-	tEspUpd2 = 0,
-	tEspDraw2 = 0,
-	tEspCheck2 = 0,
-	tEspPass2 = 0,
-	tEspMark2 = 0,
-	tEspGuard2 = 0,
-	tEspSweep2 = 0,
-	tEspCycle2 = 0,
-	tEspPhase2 = 0,
-	tEspStage2 = 0,
-	tEspSlot2 = 0,
-	tEspJob2 = 0,
-	tEspWave2 = 0,
-	tEspPulse2 = 0,
-	tEspIdle2 = 0,
-	tEspAct2 = 0,
-	tEspFrame2 = 0,
-	tEspStep2 = 0,
-	tEspBeat3 = 0,
-	tEspSync3 = 0,
-	tEspTick3 = 0,
-	tEspRun3 = 0,
-	tEspUpd3 = 0,
-	tEspDraw3 = 0,
-	tEspCheck3 = 0,
-	tEspPass3 = 0,
-	tEspMark3 = 0,
-	tEspGuard3 = 0,
-	tEspSweep3 = 0,
-	tEspCycle3 = 0,
-	tEspPhase3 = 0,
-	tEspStage3 = 0,
-	tEspSlot3 = 0,
-	tEspJob3 = 0,
-	tEspWave3 = 0,
-	tEspPulse3 = 0,
-	tEspIdle3 = 0,
-	tEspAct3 = 0,
-	tEspFrame3 = 0,
-	tEspStep3 = 0,
-	tEspBeat4 = 0,
-	tEspSync4 = 0,
-	tEspTick4 = 0,
-	tEspRun4 = 0,
-	tEspUpd4 = 0,
-	tEspDraw4 = 0,
-	tEspCheck4 = 0,
-	tEspPass4 = 0,
-	tEspMark4 = 0,
-	tEspGuard4 = 0,
-	tEspSweep4 = 0,
-	tEspCycle4 = 0,
-	tEspPhase4 = 0,
-	tEspStage4 = 0,
-	tEspSlot4 = 0,
-	tEspJob4 = 0,
-	tEspWave4 = 0,
-	tEspPulse4 = 0,
-	tEspIdle4 = 0,
-	tEspAct4 = 0,
-	tEspFrame4 = 0,
-	tEspStep4 = 0,
-	tEspBeat5 = 0,
-	tEspSync5 = 0,
-	tEspTick5 = 0,
-	tEspRun5 = 0,
-	tEspUpd5 = 0,
-	tEspDraw5 = 0,
-	tEspCheck5 = 0,
-	tEspPass5 = 0,
-	tEspMark5 = 0,
-	tEspGuard5 = 0,
-	tEspSweep5 = 0,
-	tEspCycle5 = 0,
-	tEspPhase5 = 0,
-	tEspStage5 = 0,
-	tEspSlot5 = 0,
-	tEspJob5 = 0,
-	tEspWave5 = 0,
-	tEspPulse5 = 0,
-	tEspIdle5 = 0,
-	tEspAct5 = 0,
-	tEspFrame5 = 0,
-	tEspStep5 = 0,
-	tEspBeat6 = 0,
-	tEspSync6 = 0,
-	tEspTick6 = 0,
-	tEspRun6 = 0,
-	tEspUpd6 = 0,
-	tEspDraw6 = 0,
-	tEspCheck6 = 0,
-	tEspPass6 = 0,
-	tEspMark6 = 0,
-	tEspGuard6 = 0,
-	tEspSweep6 = 0,
-	tEspCycle6 = 0,
-	tEspPhase6 = 0,
-	tEspStage6 = 0,
-	tEspSlot6 = 0,
-	tEspJob6 = 0,
-	tEspWave6 = 0,
-	tEspPulse6 = 0,
-	tEspIdle6 = 0,
-	tEspAct6 = 0,
-	tEspFrame7 = 0,
-	tEspStep7 = 0,
-	tEspBeat7 = 0,
-	tEspSync7 = 0,
-	tEspTick7 = 0,
-	tEspRun7 = 0,
-	tEspUpd7 = 0,
-	tEspDraw7 = 0,
-	tEspCheck7 = 0,
-	tEspPass7 = 0,
-	tEspMark7 = 0,
-	tEspGuard7 = 0,
-	tEspSweep7 = 0,
-	tEspCycle7 = 0,
-	tEspPhase7 = 0,
-	tEspStage7 = 0,
-	tEspSlot7 = 0,
-	tEspJob7 = 0,
-	tEspWave7 = 0,
-	tEspPulse7 = 0,
-	tEspIdle7 = 0,
-	tEspAct7 = 0,
-	tEspFrame8 = 0,
-	tEspStep8 = 0,
-	tEspBeat8 = 0,
-	tEspSync8 = 0,
-	tEspTick8 = 0,
-	tEspRun8 = 0,
-	tEspUpd8 = 0,
-	tEspDraw8 = 0,
-	tEspCheck8 = 0,
-	tEspPass8 = 0,
-	tEspMark8 = 0,
-	tEspGuard8 = 0,
-	tEspSweep8 = 0,
-	tEspCycle8 = 0,
-	tEspPhase8 = 0,
-	tEspStage8 = 0,
-	tEspSlot8 = 0,
-	tEspJob8 = 0,
-	tEspWave8 = 0,
-	tEspPulse8 = 0,
-	tEspIdle8 = 0,
-	tEspAct8 = 0,
-	tEspFrame9 = 0,
-	tEspStep9 = 0,
-	tEspBeat9 = 0,
-	tEspSync9 = 0,
-	tEspTick9 = 0,
-	tEspRun9 = 0,
-	tEspUpd9 = 0,
-	tEspDraw9 = 0,
-	tEspCheck9 = 0,
-	tEspPass9 = 0,
-	tEspMark9 = 0,
-	tEspGuard9 = 0,
-	tEspSweep9 = 0,
-	tEspCycle9 = 0,
-	tEspPhase9 = 0,
-	tEspStage9 = 0,
-	tEspSlot9 = 0,
-	tEspJob9 = 0,
-	tEspWave9 = 0,
-	tEspPulse9 = 0,
-	tEspIdle9 = 0,
-	tEspAct9 = 0,
-	tEspFrame10 = 0,
-	tEspStep10 = 0,
-	tEspBeat10 = 0,
-	tEspSync10 = 0,
-	tEspTick10 = 0,
-	tEspRun10 = 0,
-	tEspUpd10 = 0,
-	tEspDraw10 = 0,
-	tEspCheck10 = 0,
-	tEspPass10 = 0,
-	tEspMark10 = 0,
-	tEspGuard10 = 0,
-	tEspSweep10 = 0,
-	tEspCycle10 = 0,
-	tEspPhase10 = 0,
-	tEspStage10 = 0,
-	tEspSlot10 = 0,
-	tEspJob10 = 0,
-	tEspWave10 = 0,
-	tEspPulse10 = 0,
-	tEspIdle10 = 0,
-	tEspAct10 = 0,
-	tEspFrame11 = 0,
-	tEspStep11 = 0,
-	tEspBeat11 = 0,
-	tEspSync11 = 0,
-	tEspTick11 = 0,
-	tEspRun11 = 0,
-	tEspUpd11 = 0,
-	tEspDraw11 = 0,
-	tEspCheck11 = 0,
-	tEspPass11 = 0,
-	tEspMark11 = 0,
-	tEspGuard11 = 0,
-	tEspSweep11 = 0,
-	tEspCycle11 = 0,
-	tEspPhase11 = 0,
-	tEspStage11 = 0,
-	tEspSlot11 = 0,
-	tEspJob11 = 0,
-	tEspWave11 = 0,
-	tEspPulse11 = 0,
-	tEspIdle11 = 0,
-	tEspAct11 = 0,
-	tEspFrame12 = 0,
-	tEspStep12 = 0,
-	tEspBeat12 = 0,
-	tEspSync12 = 0,
-	tEspTick12 = 0,
-	tEspRun12 = 0,
-	tEspUpd12 = 0,
-	tEspDraw12 = 0,
-	tEspCheck12 = 0,
-	tEspPass12 = 0,
-	tEspMark12 = 0,
-	tEspGuard12 = 0,
-	tEspSweep12 = 0,
-	tEspCycle12 = 0,
-	tEspPhase12 = 0,
-	tEspStage12 = 0,
-	tEspSlot12 = 0,
-	tEspJob12 = 0,
-	tEspWave12 = 0,
-	tEspPulse12 = 0,
-	tEspIdle12 = 0,
-	tEspAct12 = 0,
-	tEspFrame13 = 0,
-	tEspStep13 = 0,
-	tEspBeat13 = 0,
-	tEspSync13 = 0,
-	tEspTick13 = 0,
-	tEspRun13 = 0,
-	tEspUpd13 = 0,
-	tEspDraw13 = 0,
-	tEspCheck13 = 0,
-	tEspPass13 = 0,
-	tEspMark13 = 0,
-	tEspGuard13 = 0,
-	tEspSweep13 = 0,
-	tEspCycle13 = 0,
-	tEspPhase13 = 0,
-	tEspStage13 = 0,
-	tEspSlot13 = 0,
-	tEspJob13 = 0,
-	tEspWave13 = 0,
-	tEspPulse13 = 0,
-	tEspIdle13 = 0,
-	tEspAct13 = 0,
-	tEspFrame14 = 0,
-	tEspStep14 = 0,
-	tEspBeat14 = 0,
-	tEspSync14 = 0,
-	tEspTick14 = 0,
-	tEspRun14 = 0,
-	tEspUpd14 = 0,
-	tEspDraw14 = 0,
-	tEspCheck14 = 0,
-	tEspPass14 = 0,
-	tEspMark14 = 0,
-	tEspGuard14 = 0,
-	tEspSweep14 = 0,
-	tEspCycle14 = 0,
-	tEspPhase14 = 0,
-	tEspStage14 = 0,
-	tEspSlot14 = 0,
-	tEspJob14 = 0,
-	tEspWave14 = 0,
-	tEspPulse14 = 0,
-	tEspIdle14 = 0,
-	tEspAct14 = 0,
-	tEspFrame15 = 0,
-	tEspStep15 = 0,
-	tEspBeat15 = 0,
-	tEspSync15 = 0,
-	tEspTick15 = 0,
-	tEspRun15 = 0,
-	tEspUpd15 = 0,
-	tEspDraw15 = 0,
-	tEspCheck15 = 0,
-	tEspPass15 = 0,
-	tEspMark15 = 0,
-	tEspGuard15 = 0,
-	tEspSweep15 = 0,
-	tEspCycle15 = 0,
-	tEspPhase15 = 0,
-	tEspStage15 = 0,
-	tEspSlot15 = 0,
-	tEspJob15 = 0,
-	tEspWave15 = 0,
-	tEspPulse15 = 0,
-	tEspIdle15 = 0,
-	tEspAct15 = 0,
-	tEspFrame16 = 0,
-	tEspStep16 = 0,
-	tEspBeat16 = 0,
-	tEspSync16 = 0,
-	tEspTick16 = 0,
-	tEspRun16 = 0,
-	tEspUpd16 = 0,
-	tEspDraw16 = 0,
-	tEspCheck16 = 0,
-	tEspPass16 = 0,
-	tEspMark16 = 0,
-	tEspGuard16 = 0,
-	tEspSweep16 = 0,
-	tEspCycle16 = 0,
-	tEspPhase16 = 0,
-	tEspStage16 = 0,
-	tEspSlot16 = 0,
-	tEspJob16 = 0,
-	tEspWave16 = 0,
-	tEspPulse16 = 0,
-	tEspIdle16 = 0,
-	tEspAct16 = 0,
-	tEspFrame17 = 0,
-	tEspStep17 = 0,
-	tEspBeat17 = 0,
-	tEspSync17 = 0,
-	tEspTick17 = 0,
-	tEspRun17 = 0,
-	tEspUpd17 = 0,
-	tEspDraw17 = 0,
-	tEspCheck17 = 0,
-	tEspPass17 = 0,
-	tEspMark17 = 0,
-	tEspGuard17 = 0,
-	tEspSweep17 = 0,
-	tEspCycle17 = 0,
-	tEspPhase17 = 0,
-	tEspStage17 = 0,
-	tEspSlot17 = 0,
-	tEspJob17 = 0,
-	tEspWave17 = 0,
-	tEspPulse17 = 0,
-	tEspIdle17 = 0,
-	tEspAct17 = 0,
-	tEspFrame18 = 0,
-	tEspStep18 = 0,
-	tEspBeat18 = 0,
-	tEspSync18 = 0,
-	tEspTick18 = 0,
-	tEspRun18 = 0,
-	tEspUpd18 = 0,
-	tEspDraw18 = 0,
-	tEspCheck18 = 0,
-	tEspPass18 = 0,
-	tEspMark18 = 0,
-	tEspGuard18 = 0,
-	tEspSweep18 = 0,
-	tEspCycle18 = 0,
-	tEspPhase18 = 0,
-	tEspStage18 = 0,
-	tEspSlot18 = 0,
-	tEspJob18 = 0,
-	tEspWave18 = 0,
-	tEspPulse18 = 0,
-	tEspIdle18 = 0,
-	tEspAct18 = 0,
-	tEspFrame19 = 0,
-	tEspStep19 = 0,
-	tEspBeat19 = 0,
-	tEspSync19 = 0,
-	tEspTick19 = 0,
-	tEspRun19 = 0,
-	tEspUpd19 = 0,
-	tEspDraw19 = 0,
-	tEspCheck19 = 0,
-	tEspPass19 = 0,
-	tEspMark19 = 0,
-	tEspGuard19 = 0,
-	tEspSweep19 = 0,
-	tEspCycle19 = 0,
-	tEspPhase19 = 0,
-	tEspStage19 = 0,
-	tEspSlot19 = 0,
-	tEspJob19 = 0,
-	tEspWave19 = 0,
-	tEspPulse19 = 0,
-	tEspIdle19 = 0,
-	tEspAct19 = 0,
-	tEspFrame20 = 0,
-	tEspStep20 = 0,
-	tEspBeat20 = 0,
-	tEspSync20 = 0,
-	tEspTick20 = 0,
-	tEspRun20 = 0,
-	tEspUpd20 = 0,
-	tEspDraw20 = 0,
-	tEspCheck20 = 0,
-	tEspPass20 = 0,
-	tEspMark20 = 0,
-	tEspGuard20 = 0,
-	tEspSweep20 = 0,
-	tEspCycle20 = 0,
-	tEspPhase20 = 0,
-	tEspStage20 = 0,
-	tEspSlot20 = 0,
-	tEspJob20 = 0,
-	tEspWave20 = 0,
-	tEspPulse20 = 0,
-	tEspIdle20 = 0,
-	tEspAct20 = 0,
 }
 
 local snapInv = { transp = {}, partTransp = {}, size = {}, cm = {}, acc = {}, dec = {}, mesh = {}, roupa = {} }
@@ -1241,11 +788,11 @@ local function getCR(plr)
 	return ch, ch:FindFirstChild("HumanoidRootPart") or ch.PrimaryPart, h
 end
 
-local function caido(h)
-	if not h or h.Health <= 0 then return false end
-	if h.PlatformStand then return true end
-	local ok, st = pcall(function() return h:GetState() end)
-	return ok and (st == Enum.HumanoidStateType.Ragdoll or st == Enum.HumanoidStateType.FallingDown or st == Enum.HumanoidStateType.Physics)
+local function getOrigRef(mr)
+	if S.inv and S.posInv then
+		return S.posInv
+	end
+	return mr.Position
 end
 
 local function aplNoSlow()
@@ -1409,12 +956,13 @@ local function normAng(a)
 end
 
 local function maisProx(mr, rMax, extra)
+	local orig = getOrigRef(mr)
 	local best, md = nil, rMax
 	for _, plr in ipairs(Players:GetPlayers()) do
 		if elegivel(plr) and (not extra or extra(plr)) then
 			local _, r = getCR(plr)
 			if r then
-				local d = (r.Position - mr.Position).Magnitude
+				local d = (r.Position - orig).Magnitude
 				if d <= rMax and d > 0.1 and d < md then md = d; best = r end
 			end
 		end
@@ -1431,8 +979,8 @@ local function cancPvp()
 end
 
 local function raioHitReg()
-	local r = CFG.DIST_MAX + 10
-	return S.hitOn and math.max(r, S.hitSize + 14) or r
+	local r = CFG.DIST_MAX + 6
+	return S.hitOn and math.max(r, S.hitSize + 6) or r
 end
 
 local function regPvpHit()
@@ -1444,27 +992,15 @@ local function regPvpHit()
 		if ra and ha and ha.Health > 0 then return S.alvoPvp end
 		S.alvoPvp = nil
 	end
+	local orig = getOrigRef(mr)
 	local rh = raioHitReg()
-	local lp = Vector3.new(mr.CFrame.LookVector.X, 0, mr.CFrame.LookVector.Z)
-	lp = lp.Magnitude > 0.001 and lp.Unit or Vector3.zero
 	local best, ms = nil, math.huge
 	for _, plr in ipairs(Players:GetPlayers()) do
 		if elegivel(plr) then
 			local _, r, h = getCR(plr)
 			if r and h and h.Health > 0 then
-				local dl = r.Position - mr.Position
-				local dist = dl.Magnitude
-				if dist <= rh and dist > 0.1 then
-					local pen = 0
-					if lp.Magnitude > 0.1 then
-						local dp = Vector3.new(dl.X, 0, dl.Z)
-						if dp.Magnitude > 0.01 then
-							local dot = lp:Dot(dp.Unit)
-							if dot < 0.05 then pen = (0.05 - dot) * 14 end
-						end
-					end
-					if (dist + pen) < ms then ms = dist + pen; best = plr end
-				end
+				local dist = (r.Position - orig).Magnitude
+				if dist <= rh and dist > 0.1 and dist < ms then ms = dist; best = plr end
 			end
 		end
 	end
@@ -1484,9 +1020,9 @@ local function getPvpAlvo(mr)
 		if syncHitMarc then pcall(syncHitMarc) end
 		return nil, nil, false
 	end
-	local dist = (ra.Position - mr.Position).Magnitude
+	local dist = (ra.Position - getOrigRef(mr)).Magnitude
 	local mEx = S.hitOn and (S.hitSize * 0.5) or 0
-	return ra, S.alvoPvp, (dist <= (raioHitReg() + mEx) and dist > 0.1)
+	return ra, S.alvoPvp, (dist <= (raioHitReg() + mEx + 12) and dist > 0.05)
 end
 
 local function desviarAmg(mr)
@@ -1517,14 +1053,14 @@ local function updCacheAlvos(now, mr, rMax)
 	if (now - S.tScan) < 0.04 then return end
 	S.tScan = now
 	table.clear(S.cacheAlvos)
-	local orig = (S.inv and S.posInv) or mr.Position
+	local orig = getOrigRef(mr)
 	for _, plr in ipairs(Players:GetPlayers()) do
 		if elegivel(plr) and plr.Character then
 			local h = plr.Character:FindFirstChildOfClass("Humanoid")
 			local r = plr.Character:FindFirstChild("HumanoidRootPart") or plr.Character.PrimaryPart
 			if h and h.Health > 0 and r and r.Parent then
 				local d = (r.Position - orig).Magnitude
-				if d <= (rMax + CFG.MARGEM_KA) and d > 0.1 then
+				if d <= (rMax + CFG.MARGEM_KA) and d > 0.05 then
 					table.insert(S.cacheAlvos, { plr = plr, root = r, hum = h, dist = d })
 				end
 			end
@@ -1533,26 +1069,16 @@ local function updCacheAlvos(now, mr, rMax)
 end
 
 -- ==========================================
--- FIX DEFINITIVO KILL AURA:
--- 1) TRAVA NO ALVO ESCOLHIDO / MAIS PROXIMO ATE MORRER, SAIR OU DESLIGAR KA
--- 2) NAO PERDE O ALVO QUANDO HA 2+ PESSOAS OU QUANDO ELE CAI
--- 3) NAO ATIRA NO VAZIO ("GHOST") QUANDO NAO HA ALVO VALIDO
+-- HITBOX AURA + CONCENTRACAO NO ALVO PVP:
+-- 1) Concentra todos os golpes no alvo travado ate ele morrer, sair ou desligar KA
+-- 2) Nao pega em jogadores distantes fora do raio efetivo
+-- 3) Respeita o ritmo de ataque para evitar "ghost swings"
 -- ==========================================
-local function alvoKaValido(plr, mr, limMant)
-	if not plr or plr.Parent ~= Players or not elegivel(plr) then return nil, nil end
-	local ch = plr.Character
-	if not ch or not ch.Parent then return nil, nil end
-	local h = ch:FindFirstChildOfClass("Humanoid")
-	local r = ch:FindFirstChild("HumanoidRootPart") or ch.PrimaryPart
-	if not h or not r or not r.Parent or h.Health <= 0 then return nil, nil end
-	local orig = (S.inv and S.posInv) or mr.Position
-	local dist = (r.Position - orig).Magnitude
-	-- Margem extra generosa para alvos caidos / em ragdoll / empurrados no PvP
-	local tolExtra = caido(h) and 14 or 6
-	if dist <= (limMant + tolExtra) and dist > 0.05 then
-		return r, plr
+local function getRaioEfetivoKa()
+	if S.hitOn then
+		return math.max(CFG.DIST_KA, S.hitSize + 4)
 	end
-	return nil, nil
+	return CFG.DIST_KA
 end
 
 local function getAlvoKa(mr, rMax, now)
@@ -1570,39 +1096,27 @@ local function getAlvoKa(mr, rMax, now)
 		return nil, nil
 	end
 
-	local mEx = S.hitOn and (S.hitSize * 0.5) or 0
-	local limBusca = rMax + mEx
-	local limMant = limBusca + CFG.MARGEM_KA
+	local orig = getOrigRef(mr)
+	local limBusca = rMax
+	local limMant = rMax + CFG.MARGEM_KA + 12
 
-	-- Se ja ha um alvo travado para este PvP no Kill Aura, mantem ele ATE O FIM
-	-- (so troca se morrer, sair do jogo, virar AMG ou voce desligar/ligar o Kill Aura)
+	-- Mantem o foco exclusivo no alvo atual ate ele morrer, sair ou o Kill Aura ser desligado
 	local travado = S.kaLockPlr or S.alvoKa
-	if travado then
-		local rLock, pLock = alvoKaValido(travado, mr, limMant)
-		if rLock and pLock then
-			S.alvoKa, S.kaLockPlr = pLock, pLock
-			return rLock, pLock
-		end
-		-- Se o alvo travado ainda esta vivo e no servidor mas afastou um pouco, so solta se realmente saiu da arena/alcance largo
-		if travado.Parent == Players and elegivel(travado) and travado.Character then
-			local hL = travado.Character:FindFirstChildOfClass("Humanoid")
-			local rL = travado.Character:FindFirstChild("HumanoidRootPart") or travado.Character.PrimaryPart
-			if hL and hL.Health > 0 and rL and rL.Parent then
-				local dL = (rL.Position - ((S.inv and S.posInv) or mr.Position)).Magnitude
-				if dL <= (limMant + 22) then
-					S.alvoKa, S.kaLockPlr = travado, travado
-					return rL, travado
-				end
+	if travado and travado.Parent == Players and elegivel(travado) then
+		local _, rt, ht = getCR(travado)
+		if rt and rt.Parent and ht and ht.Health > 0 then
+			local dt = (rt.Position - orig).Magnitude
+			if dt <= limMant and dt > 0.05 then
+				S.alvoKa, S.kaLockPlr = travado, travado
+				return rt, travado
 			end
 		end
-		S.alvoKa, S.kaLockPlr = nil, nil
 	end
 
-	-- Nenhum alvo travado: escolhe o mais proximo elegivel
+	S.alvoKa, S.kaLockPlr = nil, nil
 	updCacheAlvos(now, mr, rMax)
-	local orig = (S.inv and S.posInv) or mr.Position
-	local bestR, bestP, bestD = nil, nil, math.huge
 
+	local bestR, bestP, bestD = nil, nil, math.huge
 	for _, it in ipairs(S.cacheAlvos) do
 		if it.plr and it.plr.Parent == Players and elegivel(it.plr) and it.root and it.root.Parent and it.hum and it.hum.Health > 0 then
 			local d = (it.root.Position - orig).Magnitude
@@ -1630,13 +1144,8 @@ local function getAlvoKa(mr, rMax, now)
 		end
 	end
 
-	if bestR and bestP then
-		S.alvoKa, S.kaLockPlr = bestP, bestP
-		return bestR, bestP
-	end
-
-	S.alvoKa, S.kaLockPlr = nil, nil
-	return nil, nil
+	S.alvoKa, S.kaLockPlr = bestP, bestP
+	return bestR, bestP
 end
 
 local function aplCostas()
@@ -1660,16 +1169,14 @@ local function temAlvoClk(mr)
 		local rl, _, ok = getPvpAlvo(mr)
 		return (rl ~= nil and ok)
 	end
-	local raio = CFG.DIST_MAX + (S.inv and 16 or 0)
-	if S.hitOn and (S.hitSize + 6) > raio then raio = S.hitSize + 6 end
-	local orig = (S.inv and S.posInv) or mr.Position
-	local mEx = S.hitOn and (S.hitSize * 0.5) or 0
+	local orig = getOrigRef(mr)
+	local raio = getRaioEfetivoKa()
 	for _, plr in ipairs(Players:GetPlayers()) do
 		if elegivel(plr) then
 			local _, r = getCR(plr)
 			if r then
 				local d = (r.Position - orig).Magnitude
-				if d <= (raio + mEx) and d > 0.1 then return true end
+				if d <= raio and d > 0.05 then return true end
 			end
 		end
 	end
@@ -1696,7 +1203,7 @@ local function pulsoAtk(ch, mr, now, atTool)
 		local tool = ch:FindFirstChildOfClass("Tool")
 		if tool and tool.Parent == ch then
 			if not tool.Enabled then tool.Enabled = true end
-			tool:Activate()
+			pcall(function() tool:Activate() end)
 		end
 	end
 	clkRapido()
@@ -1716,7 +1223,7 @@ local function procKa(now)
 		return false
 	end
 	if S.inv then travarInv(ch, mr, h) end
-	local rEf = S.hitOn and math.max(CFG.DIST_KA, S.hitSize + 6) or (CFG.DIST_KA + (S.inv and 16 or 0))
+	local rEf = getRaioEfetivoKa()
 	local alvo, plrAlvo = getAlvoKa(mr, rEf, now)
 	if not alvo or not plrAlvo then
 		pulsoAte, yawAntes, yawPulso = 0, nil, nil
@@ -1724,14 +1231,12 @@ local function procKa(now)
 		return false
 	end
 	S.tKa = now
-	if CFG.KA_PULSO and not S.inv then
-		local _, ya, _ = mr.CFrame:ToEulerAnglesYXZ()
-		if yawAntes == nil then yawAntes = ya end
+	-- Orienta suavemente o personagem em direcao ao alvo travado no PvP (fora do modo invisivel)
+	if not S.inv and not CFG.ORBITAR and not UserInputService:GetFocusedTextBox() then
 		local dx, dz = alvo.Position.X - mr.Position.X, alvo.Position.Z - mr.Position.Z
-		if (dx * dx + dz * dz) > 0.0025 then
-			yawPulso = math.atan2(-dx, -dz)
-			mr.CFrame = CFrame.new(mr.Position) * CFrame.fromEulerAnglesYXZ(0, yawPulso, 0)
-			pulsoAte = now + CFG.DUR_PULSO
+		if (dx * dx + dz * dz) > 0.01 then
+			local _, ya, _ = mr.CFrame:ToEulerAnglesYXZ()
+			mr.CFrame = CFrame.new(mr.Position) * CFrame.fromEulerAnglesYXZ(0, ya + (normAng(math.atan2(-dx, -dz) - ya) * 0.65), 0)
 		end
 	end
 	local raj = S.inv and CFG.RAJADA_KA_INV or CFG.RAJADA_KA_NORM
@@ -1840,7 +1345,7 @@ syncHitMarc = function()
 				local m = garMarc(plr, r)
 				if m and m.tagGui and m.tagDot then
 					if isA then m.tagGui.Enabled = true; m.tagDot.BackgroundColor3 = Color3.fromRGB(45, 215, 95)
-					elseif isF or (S.pvpLoop and plr == plF) then m.tagGui.Enabled = true; m.tagDot.BackgroundColor3 = Color3.fromRGB(230, 45, 45)
+					elseif isF or (S.pvpLoop and plr == plF) or (S.ka and plr == S.kaLockPlr) then m.tagGui.Enabled = true; m.tagDot.BackgroundColor3 = Color3.fromRGB(230, 45, 45)
 					else m.tagGui.Enabled = false end
 				end
 				if exp then
@@ -2357,4 +1862,4 @@ Players.PlayerRemoving:Connect(function(plr)
 	S.limpEspPlr(plr)
 end)
 
-print("[The VOID Painel] Organizado, compactado e com VOID ESP na aba Visual.")
+print("[The VOID Painel] Kill Aura focado no PvP + Hitbox Aura atualizado.")
