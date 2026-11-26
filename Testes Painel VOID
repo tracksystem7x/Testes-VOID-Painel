@@ -13,7 +13,6 @@ local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local StatsService = game:GetService("Stats")
 local Lighting = game:GetService("Lighting")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CoreGui = game:GetService("CoreGui")
 
 local LocalPlayer = Players.LocalPlayer
@@ -38,7 +37,7 @@ if not EH_HIGHSCHOOL_RP then
 end
 
 -- ==========================================
--- CONFIGURACAO GERAL (MODO NORMAL MAXIMO VS MODO INVISIVEL ANTI-QUEDA DE FPS)
+-- CONFIGURACAO GERAL
 -- ==========================================
 local TECLA_ATALHO = Enum.KeyCode.E
 local TECLA_KILL_AURA = Enum.KeyCode.Q
@@ -58,15 +57,15 @@ local DISTANCIA_MAXIMA_COSTAS = 45
 local DISTANCIA_KILL_AURA = EH_HIGHSCHOOL_RP and 26 or 30
 local MARGEM_PERSISTENCIA_KILL_AURA = 6
 
--- Perfil NORMAL (sem Invisivel): delay minimo e rajada maxima
-local DELAY_KILL_AURA_NORMAL = 0.001
+-- Modo NORMAL (Invisivel OFF): clique rapido e rajada alta sem afogar o frame
+local DELAY_KILL_AURA_NORMAL = 0.012
 local RAJADA_KILL_AURA_NORMAL = 5
-local DELAY_CLIQUE_NORMAL = 0.001
+local DELAY_CLIQUE_NORMAL = 0.012
 
--- Perfil INVISIVEL (com Invisivel ligado): ritmo seguro para manter o FPS alto
-local DELAY_KILL_AURA_INVISIVEL = 0.045
+-- Modo INVISIVEL (Invisivel ON): ritmo leve para evitar queda de FPS e glitches
+local DELAY_KILL_AURA_INVISIVEL = 0.05
 local RAJADA_KILL_AURA_INVISIVEL = 1
-local DELAY_CLIQUE_INVISIVEL = 0.045
+local DELAY_CLIQUE_INVISIVEL = 0.05
 
 local KILL_AURA_PULSO_ALVO = false
 local DURACAO_PULSO_MIRA = 0.008
@@ -88,7 +87,7 @@ local KILL_AURA_PADRAO_ATIVO = false
 local FIGHTING_PADRAO_ATIVO = false
 local NO_ANIMATION_PADRAO_ATIVO = false
 local INVISIVEL_PADRAO_ATIVO = false
-local INVISIVEL_PROFUNDIDADE = EH_HIGHSCHOOL_RP and 6.0 or 5.5
+local INVISIVEL_PROFUNDIDADE = 3.2
 local HUD_LOSANGO_PADRAO_VISIVEL = true
 local HUD_STATS_PADRAO_VISIVEL = true
 local SPEED_CFRAME_PADRAO_ATIVO = false
@@ -111,7 +110,6 @@ local HITBOX_VISIVEL_PADRAO = true
 local HITBOX_TRANSPARENCIA_VISIVEL = 0.965
 local COR_HITBOX_AURA = Color3.fromRGB(220, 55, 55)
 
--- Tema Roxo Nexus
 local ROXO_NEXUS = Color3.fromRGB(155, 65, 255)
 local BOTAO_CINZA = Color3.fromRGB(42, 42, 50)
 local BOTAO_ROXO_ON = Color3.fromRGB(145, 50, 250)
@@ -243,10 +241,10 @@ local function setKillAuraEstado(novoEstado)
 end
 
 -- ==========================================
--- GARANTIR NOMES E VIDA DOS OUTROS JOGADORES SEMPRE VISIVEIS
+-- GARANTIR NOMES E VIDA DOS OUTROS JOGADORES VISIVEIS
 -- ==========================================
 local function garantirNomesEVidaOutrosJogadores(agora)
-	if agora and (agora - ultimoVisibilidadeOutrosTick) < 0.25 then
+	if agora and (agora - ultimoVisibilidadeOutrosTick) < 0.5 then
 		return
 	end
 	ultimoVisibilidadeOutrosTick = agora or os.clock()
@@ -267,9 +265,9 @@ local function garantirNomesEVidaOutrosJogadores(agora)
 					end)
 				end
 				for _, desc in ipairs(char:GetChildren()) do
-					if desc:IsA("BillboardGui") then
+					if desc:IsA("BillboardGui") and desc.Name ~= "AMG_Focus_Indicator" then
 						pcall(function()
-							if desc.Name ~= "AMG_Focus_Indicator" then
+							if not desc.Enabled then
 								desc.Enabled = true
 							end
 						end)
@@ -281,7 +279,7 @@ local function garantirNomesEVidaOutrosJogadores(agora)
 end
 
 -- ==========================================
--- FIGHTING TOGGLE LEVE (SEM VARREDURA PESADA NO LOOP)
+-- FIGHTING TOGGLE LEVE
 -- ==========================================
 local PALAVRAS_FIGHT = { "fight", "pvp", "combat", "incombat", "battle", "brawl", "arena", "court", "quadra", "zone", "ragdoll", "safe" }
 
@@ -351,7 +349,7 @@ end
 
 local function garantirEstadoCombateParaAtaque(agora)
 	local now = agora or os.clock()
-	if (now - ultimoSyncCombateTick) < 0.25 then return end
+	if (now - ultimoSyncCombateTick) < 0.4 then return end
 	ultimoSyncCombateTick = now
 	local char = LocalPlayer.Character
 	local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -359,7 +357,7 @@ local function garantirEstadoCombateParaAtaque(agora)
 end
 
 -- ==========================================
--- OTIMIZACAO DE FPS E LIMPEZA VISUAL / REDE LEVE
+-- OTIMIZACAO DE FPS
 -- ==========================================
 local function aplicarOtimizacaoFpsERede(ativar)
 	boostFpsRedeAtivo = ativar
@@ -618,7 +616,7 @@ end
 atualizarVisual(false)
 
 -- ==========================================
--- NO ANIMATION (PACOTE PADRAO + SEM SOCO / SEM ESPECIAL G)
+-- NO ANIMATION
 -- ==========================================
 local NOMES_MOVIMENTO_PADRAO = {
 	"idle", "walk", "run", "jump", "fall", "swim", "climb", "land", "freefall", "running", "walking"
@@ -755,7 +753,7 @@ local function sincronizarNoAnimation()
 end
 
 -- ==========================================
--- INVISIVEL (FIO DEITADO SEM CABECA SOB O CHAO + CACHE LEVE PARA ALTO FPS)
+-- INVISIVEL ESTAVEL SOB O CHAO (SEM SUBIR/LEVANTAR E SEM ATRAPALHAR ATAQUE)
 -- ==========================================
 local function obterCachePartesPersonagem(char)
 	if not char then return {} end
@@ -840,22 +838,20 @@ local function aplicarFioDeitadoSemCabecaEOcultarApenasMeuNome(char, hum, ativar
 							snapshotTamanhoInvisivel[desc] = desc.Size
 						end
 						local alvoSize = (desc.Name == "Head") and Vector3.new(0.01, 0.01, 0.01)
-							or ((desc.Name == "HumanoidRootPart") and Vector3.new(0.05, 0.01, 0.05) or Vector3.new(0.02, 0.01, 0.02))
+							or ((desc.Name == "HumanoidRootPart") and Vector3.new(0.2, 0.05, 0.2) or Vector3.new(0.02, 0.01, 0.02))
 						if desc.Size ~= alvoSize then
 							pcall(function() desc.Size = alvoSize end)
 						end
 					end
-					if desc.Name ~= "HumanoidRootPart" then
-						if snapshotTransparenciaInvisivel[desc] == nil then
-							snapshotTransparenciaInvisivel[desc] = desc.LocalTransparencyModifier
-						end
-						if desc.LocalTransparencyModifier ~= 1 or desc.CastShadow or desc.CanCollide then
-							pcall(function()
-								desc.LocalTransparencyModifier = 1
-								desc.CastShadow = false
-								desc.CanCollide = false
-							end)
-						end
+					if snapshotTransparenciaInvisivel[desc] == nil then
+						snapshotTransparenciaInvisivel[desc] = desc.LocalTransparencyModifier
+					end
+					if desc.LocalTransparencyModifier ~= 1 or desc.CastShadow or desc.CanCollide then
+						pcall(function()
+							desc.LocalTransparencyModifier = 1
+							desc.CastShadow = false
+							desc.CanCollide = false
+						end)
 					end
 				elseif desc:IsA("Decal") or desc:IsA("Texture") then
 					if snapshotDecalsInvisivel[desc] == nil then
@@ -1001,7 +997,7 @@ local function atualizarInvisivelSubsolo(dt, agora)
 		yawSuperficieInvisivel = yawAtual
 	end
 
-	local velHorizontal = WALKSPEED_BASE + (speedCFrameAtivo and math.max(0, speedCFrameValor - 1) or 0)
+	local velHorizontal = WALKSPEED_BASE + (speedCFrameAtivo and math.min(24, math.max(0, speedCFrameValor - 1)) or 0)
 	local passoPlano = obterInputMovimentoPlano()
 	if passoPlano.Magnitude > 0.01 then
 		local desloc = passoPlano * (velHorizontal * math.clamp(dt or 0.016, 0.001, 0.05))
@@ -1011,14 +1007,6 @@ local function atualizarInvisivelSubsolo(dt, agora)
 			posSuperficieInvisivel.Z + desloc.Z
 		)
 		yawSuperficieInvisivel = math.atan2(-passoPlano.X, -passoPlano.Z)
-	else
-		local cam = workspace.CurrentCamera
-		if cam then
-			local lookPlano = Vector3.new(cam.CFrame.LookVector.X, 0, cam.CFrame.LookVector.Z)
-			if lookPlano.Magnitude > 0.01 then
-				yawSuperficieInvisivel = math.atan2(-lookPlano.X, -lookPlano.Z)
-			end
-		end
 	end
 
 	local alturaLimiteVoid = workspace.FallenPartsDestroyHeight + 25
@@ -1028,7 +1016,8 @@ local function atualizarInvisivelSubsolo(dt, agora)
 		* CFrame.Angles(math.rad(90), 0, 0)
 
 	if hum.Sit then hum.Sit = false end
-	if hum.PlatformStand then hum.PlatformStand = false end
+	if not hum.PlatformStand then hum.PlatformStand = true end
+	if root.CanCollide then root.CanCollide = false end
 	if root.AssemblyLinearVelocity ~= Vector3.zero then
 		root.AssemblyLinearVelocity = Vector3.zero
 	end
@@ -1038,7 +1027,7 @@ local function atualizarInvisivelSubsolo(dt, agora)
 	root.CFrame = cfFioDeitado
 
 	local now = agora or os.clock()
-	local aplicarTamanhos = (now - ultimoSyncTamanhoInvisivel) >= 0.35
+	local aplicarTamanhos = (now - ultimoSyncTamanhoInvisivel) >= 0.45
 	if aplicarTamanhos then
 		ultimoSyncTamanhoInvisivel = now
 	end
@@ -1068,6 +1057,7 @@ local function setInvisivelEstado(novoEstado)
 					hum.PlatformStand = false
 					hum:ChangeState(Enum.HumanoidStateType.GettingUp)
 				end
+				root.CanCollide = true
 				root.AssemblyLinearVelocity = Vector3.zero
 				root.AssemblyAngularVelocity = Vector3.zero
 				root.CFrame = cfVolta
@@ -1088,7 +1078,7 @@ local function setInvisivelEstado(novoEstado)
 end
 
 -- ==========================================
--- DEATH TP (SALVA POSICAO DA MORTE E VOLTA AO RENASCER)
+-- DEATH TP
 -- ==========================================
 local function registrarMorteSeNecessario(char)
 	if morteRegistradaNestaVida then return end
@@ -1250,7 +1240,7 @@ local function jogadorEstaCaidoKnockdown(hum)
 end
 
 -- ==========================================
--- NO SLOW (EVITA REDUCAO DE WALKSPEED POR GOLPE/EFEITO)
+-- NO SLOW
 -- ==========================================
 local function aplicarNoSlow()
 	if not noSlowAtivo then return end
@@ -1266,7 +1256,7 @@ local function aplicarNoSlow()
 end
 
 -- ==========================================
--- MULTIPLICADOR DE JUMP (REGULADO E SUAVE ATE 1000)
+-- MULTIPLICADOR DE JUMP
 -- ==========================================
 local function calcularJumpPowerRegulado(baseJp, valorSlider)
 	if valorSlider <= 1 then
@@ -1355,7 +1345,7 @@ local function aplicarAntiGrabRag()
 end
 
 -- ==========================================
--- SPEED MULTI-MODO + CFRAME SPEED (ESCALA ORIGINAL + ANIMACAO)
+-- SPEED MULTI-MODO + CFRAME SPEED
 -- ==========================================
 local function obterDirecaoMovimentoCFrame(hum)
 	local dir = hum and hum.MoveDirection or Vector3.zero
@@ -1576,7 +1566,7 @@ local function cancelarAlvoPvpLoop()
 end
 
 -- ==========================================
--- PVP FOCUS LOOP (PRIMEIRO GOLPE LIVRE SEM HITBOX -> ATIVA HITBOX, FOCO E LOCK NO ALVO)
+-- PVP FOCUS LOOP
 -- ==========================================
 local function obterRaioHitRegistro()
 	local raio = DISTANCIA_MAXIMA + 10
@@ -1676,7 +1666,7 @@ local function obterAlvoPvpLoopRegistrado(meuRoot)
 end
 
 -- ==========================================
--- DESVIO QUANDO AMIGO (AMG) ESTA NA FRENTE E INIMIGO ESTA ATRAS
+-- DESVIO QUANDO AMIGO ESTA NA FRENTE
 -- ==========================================
 local function desviarMiraSeAmigoNaFrente(meuRoot)
 	if not meuRoot then return end
@@ -1722,7 +1712,7 @@ local function desviarMiraSeAmigoNaFrente(meuRoot)
 end
 
 -- ==========================================
--- SELECAO PERSISTENTE DO KILL AURA (FOCUS ESTRITO + ZERO AMIGOS)
+-- SELECAO PERSISTENTE DO KILL AURA
 -- ==========================================
 local function obterAlvoKillAuraPersistente(meuRoot, raioMax)
 	if not meuRoot then return nil, nil end
@@ -1776,7 +1766,7 @@ local function obterAlvoKillAuraPersistente(meuRoot, raioMax)
 end
 
 -- ==========================================
--- BACK / COSTAS (COLA ATRAS DO INIMIGO OLHANDO PARA AS COSTAS DELE)
+-- BACK / COSTAS
 -- ==========================================
 local function aplicarBackCostas()
 	if not backCostasAtivo or invisivelAtivo then return end
@@ -1859,18 +1849,20 @@ local function executarCliqueRapido()
 	end)
 end
 
-local function dispararPulsoAtaque(char, meuRoot, agora)
+local function dispararPulsoAtaque(char, meuRoot, agora, ativarTool)
 	garantirEstadoCombateParaAtaque(agora)
 	if meuRoot and not pvpFocusLoopAtivo and not invisivelAtivo then
 		desviarMiraSeAmigoNaFrente(meuRoot)
 	end
-	if char then
+	if ativarTool and char then
 		local tool = char:FindFirstChildOfClass("Tool")
 		if tool and tool.Parent == char then
 			if not tool.Enabled then
 				tool.Enabled = true
 			end
-			tool:Activate()
+			pcall(function()
+				tool:Activate()
+			end)
 		end
 	end
 	executarCliqueRapido()
@@ -1919,8 +1911,8 @@ local function processarKillAuraFrame(agora)
 	end
 
 	local rajadaAtual = obterRajadaKillAuraAtual()
-	for _ = 1, rajadaAtual do
-		dispararPulsoAtaque(char, meuRoot, agora)
+	for idx = 1, rajadaAtual do
+		dispararPulsoAtaque(char, meuRoot, agora, idx == 1)
 	end
 
 	return true
@@ -1942,7 +1934,7 @@ local function processarAutoClickFrame(agora, killAuraAtacouNesteFrame)
 	local char, meuRoot = getCharAndRoot(LocalPlayer)
 	if meuRoot and haAlvoNoAlcanceAutoClick(meuRoot) then
 		ultimoDisparoAutoClickTick = agora
-		dispararPulsoAtaque(char, meuRoot, agora)
+		dispararPulsoAtaque(char, meuRoot, agora, true)
 	end
 end
 
@@ -2976,7 +2968,7 @@ end)
 task.spawn(function()
 	while true do
 		pcall(sincronizarHitboxEMarcadores)
-		task.wait(0.4)
+		task.wait(0.5)
 	end
 end)
 
@@ -2990,4 +2982,4 @@ Players.PlayerRemoving:Connect(function(plr)
 	limparMarcador(plr)
 end)
 
-print("[The VOID Painel] Perfil dinamico ativo: Normal (0.001 / rajada 5) e Invisivel (anti-queda FPS)!")
+print("[The VOID Painel] Kill Aura otimizado, Invisivel estavel e nomes/vida dos outros preservados!")
