@@ -13,6 +13,7 @@ local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local StatsService = game:GetService("Stats")
 local Lighting = game:GetService("Lighting")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CoreGui = game:GetService("CoreGui")
 
 local LocalPlayer = Players.LocalPlayer
@@ -57,9 +58,10 @@ local ANTI_GRAB_RAG_PADRAO_ATIVO = false
 local DEATH_TP_PADRAO_ATIVO = false
 local NO_SLOW_PADRAO_ATIVO = false
 local KILL_AURA_PADRAO_ATIVO = false
+local FORCE_COMBAT_PADRAO_ATIVO = false
 local NO_ANIMATION_PADRAO_ATIVO = false
 local INVISIVEL_PADRAO_ATIVO = false
-local INVISIVEL_PROFUNDIDADE = 5
+local INVISIVEL_PROFUNDIDADE = 3.2
 local HUD_LOSANGO_PADRAO_VISIVEL = true
 local HUD_STATS_PADRAO_VISIVEL = true
 local SPEED_CFRAME_PADRAO_ATIVO = false
@@ -86,7 +88,7 @@ local COR_HITBOX_AURA = Color3.fromRGB(220, 55, 55)
 local ROXO_NEXUS = Color3.fromRGB(155, 65, 255)
 local BOTAO_CINZA = Color3.fromRGB(42, 42, 50)
 local BOTAO_ROXO_ON = Color3.fromRGB(145, 50, 250)
-local POSICAO_PAINEL_PADRAO = UDim2.new(1, -214, 1, -509)
+local POSICAO_PAINEL_PADRAO = UDim2.new(1, -214, 1, -529)
 -- ==========================================
 
 if getgenv then
@@ -103,6 +105,7 @@ local antiGrabRagAtivo = ANTI_GRAB_RAG_PADRAO_ATIVO
 local deathTpAtivo = DEATH_TP_PADRAO_ATIVO
 local noSlowAtivo = NO_SLOW_PADRAO_ATIVO
 local killAuraAtivo = KILL_AURA_PADRAO_ATIVO
+local forceCombatAtivo = FORCE_COMBAT_PADRAO_ATIVO
 local noAnimationAtivo = NO_ANIMATION_PADRAO_ATIVO
 local invisivelAtivo = INVISIVEL_PADRAO_ATIVO
 local cframeSuperficieInvisivel = nil
@@ -125,6 +128,7 @@ local alvoKillAuraPlayer = nil
 local ultimoDisparoKillAuraTick = 0
 local ultimoDisparoAutoClickTick = 0
 local janelaRegistroHitAte = 0
+local ultimoScanCombatTick = 0
 
 local hitboxAtivo = HITBOX_PADRAO_ATIVO
 local hitboxVisivel = HITBOX_VISIVEL_PADRAO
@@ -189,6 +193,108 @@ local function setKillAuraEstado(novoEstado)
 		yawAplicadoNoPulso = nil
 	end
 	atualizarKillAuraUI(killAuraAtivo)
+end
+
+-- ==========================================
+-- FORCE COMBAT (DETECCAO E MANUTENCAO DE ESTADO DE COMBATE)
+-- ==========================================
+local PALAVRAS_COMBAT = { "pvp", "combat", "fight", "battle", "arena", "danger", "hostile", "incombat" }
+
+local function nomeIndicaCombate(nome)
+	if not nome or nome == "" then return false end
+	local low = string.lower(nome)
+	for _, p in ipairs(PALAVRAS_COMBAT) do
+		if string.find(low, p, 1, true) then
+			return true
+		end
+	end
+	return false
+end
+
+local function executarForcaCombate(logarDetalhes)
+	if not forceCombatAtivo then return end
+	local agora = os.clock()
+	local deveLogar = logarDetalhes or ((agora - ultimoScanCombatTick) >= 2.0)
+	if deveLogar then
+		ultimoScanCombatTick = agora
+	end
+
+	local encontrados = {}
+	local char = LocalPlayer.Character
+	local root = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
+
+	local function inspecionarContainer(container)
+		if not container then return end
+		for _, desc in ipairs(container:GetDescendants()) do
+			if desc:IsA("BoolValue") and nomeIndicaCombate(desc.Name) then
+				if not desc.Value then
+					pcall(function() desc.Value = true end)
+				end
+				table.insert(encontrados, "BoolValue:" .. desc:GetFullName())
+			elseif desc:IsA("StringValue") and nomeIndicaCombate(desc.Name) then
+				if desc.Value == "" or string.lower(desc.Value) == "false" or string.lower(desc.Value) == "safe" then
+					pcall(function() desc.Value = "Combat" end)
+				end
+				table.insert(encontrados, "StringValue:" .. desc:GetFullName())
+			end
+		end
+
+		pcall(function()
+			for attrName, attrVal in pairs(container:GetAttributes()) do
+				if nomeIndicaCombate(attrName) then
+					if typeof(attrVal) == "boolean" and not attrVal then
+						container:SetAttribute(attrName, true)
+					elseif typeof(attrVal) == "string" and (attrVal == "" or string.lower(attrVal) == "false" or string.lower(attrVal) == "safe") then
+						container:SetAttribute(attrName, "Combat")
+					end
+					table.insert(encontrados, "Attr:" .. container.Name .. "." .. attrName)
+				end
+			end
+		end)
+	end
+
+	inspecionarContainer(LocalPlayer)
+	inspecionarContainer(char)
+
+	pcall(function()
+		for _, desc in ipairs(ReplicatedStorage:GetDescendants()) do
+			if desc:IsA("RemoteEvent") and nomeIndicaCombate(desc.Name) then
+				pcall(function()
+					desc:FireServer(true)
+					desc:FireServer("Combat")
+					desc:FireServer("EnterPvP")
+				end)
+				table.insert(encontrados, "Remote:" .. desc.Name)
+			end
+		end
+	end)
+
+	if root and typeof(firetouchinterest) == "function" then
+		pcall(function()
+			for _, obj in ipairs(workspace:GetDescendants()) do
+				if obj:IsA("BasePart") and nomeIndicaCombate(obj.Name) then
+					firetouchinterest(root, obj, 0)
+					firetouchinterest(root, obj, 1)
+					table.insert(encontrados, "Zone:" .. obj.Name)
+				end
+			end
+		end)
+	end
+
+	if deveLogar then
+		if #encontrados > 0 then
+			print("[Force Combat] Sinais detectados/acionados (" .. tostring(#encontrados) .. "): " .. table.concat(encontrados, ", "))
+		else
+			warn("[Force Combat] Ativo, mas nenhum Remote/BoolValue/Zona nomeada com PvP/Combat foi exposta ao cliente.")
+		end
+	end
+end
+
+local function setForceCombatEstado(novoEstado)
+	forceCombatAtivo = novoEstado
+	if forceCombatAtivo then
+		executarForcaCombate(true)
+	end
 end
 
 -- ==========================================
@@ -588,7 +694,7 @@ local function sincronizarNoAnimation()
 end
 
 -- ==========================================
--- INVISIVEL (UNDERGROUND DESYNC + CAMERA NATIVA LIVRE)
+-- INVISIVEL (DESYNC SEGURO COM MOVIMENTO LIVRE E CAMERA NORMAL)
 -- ==========================================
 local function aplicarVisualFantasmaLocal(char, ativar)
 	if not char then return end
@@ -599,7 +705,7 @@ local function aplicarVisualFantasmaLocal(char, ativar)
 					snapshotTransparenciaInvisivel[desc] = desc.LocalTransparencyModifier
 				end
 				pcall(function()
-					desc.LocalTransparencyModifier = math.max(desc.LocalTransparencyModifier, 0.45)
+					desc.LocalTransparencyModifier = math.max(desc.LocalTransparencyModifier, 0.35)
 				end)
 			end
 		end
@@ -636,7 +742,9 @@ local function restaurarSuperficieAntesDoRender()
 	local root = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
 	if desyncSubsoloAplicado and root and cframeSuperficieInvisivel then
 		pcall(function()
-			root.CFrame = cframeSuperficieInvisivel
+			local posAtual = root.Position
+			local _, yawAtual, _ = root.CFrame:ToEulerAnglesYXZ()
+			root.CFrame = CFrame.new(posAtual.X, cframeSuperficieInvisivel.Position.Y, posAtual.Z) * CFrame.fromEulerAnglesYXZ(0, yawAtual, 0)
 		end)
 		desyncSubsoloAplicado = false
 	end
@@ -663,18 +771,15 @@ local function aplicarInvisivelDesyncHeartbeat()
 	local root = char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
 	if not root then return end
 
-	if not cframeSuperficieInvisivel then
-		cframeSuperficieInvisivel = root.CFrame
-	end
+	local ySuperficie = root.Position.Y
+	cframeSuperficieInvisivel = CFrame.new(root.Position.X, ySuperficie, root.Position.Z)
 
 	local alturaLimiteVoid = workspace.FallenPartsDestroyHeight + 25
-	local ySubsolo = math.max(cframeSuperficieInvisivel.Position.Y - INVISIVEL_PROFUNDIDADE, alturaLimiteVoid)
-	local posSubsolo = Vector3.new(cframeSuperficieInvisivel.Position.X, ySubsolo, cframeSuperficieInvisivel.Position.Z)
-	local rotacaoAtual = cframeSuperficieInvisivel - cframeSuperficieInvisivel.Position
+	local ySubsolo = math.max(ySuperficie - INVISIVEL_PROFUNDIDADE, alturaLimiteVoid)
+	local _, yawAtual, _ = root.CFrame:ToEulerAnglesYXZ()
 
 	pcall(function()
-		root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, 0, root.AssemblyLinearVelocity.Z)
-		root.CFrame = CFrame.new(posSubsolo) * rotacaoAtual
+		root.CFrame = CFrame.new(root.Position.X, ySubsolo, root.Position.Z) * CFrame.fromEulerAnglesYXZ(0, yawAtual, 0)
 	end)
 	desyncSubsoloAplicado = true
 end
@@ -1838,7 +1943,7 @@ local function criarPainelHitbox()
 
 	local frame = Instance.new("Frame")
 	frame.Name = "MainPanel"
-	frame.Size = UDim2.new(0, 200, 0, 499)
+	frame.Size = UDim2.new(0, 200, 0, 519)
 	frame.Position = POSICAO_PAINEL_PADRAO
 	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
 	frame.BorderSizePixel = 0
@@ -1922,12 +2027,12 @@ local function criarPainelHitbox()
 	end
 
 	local pagCombat = abasPaginas.Combat
-	local btnAuto = criarBotaoPadrao(pagCombat, "AutoClick VOID (E): OFF", UDim2.new(0, 8, 0, 0), UDim2.new(1, -16, 0, 20), 11)
+	local btnAuto = criarBotaoPadrao(pagCombat, "AutoClick VOID (E): OFF", UDim2.new(0, 8, 0, 0), UDim2.new(1, -16, 0, 19), 11)
 	local btnLock = criarBotaoPadrao(
 		pagCombat,
 		targetLockHabilitadoNoPainel and "Target Lock: ON" or "Target Lock: OFF",
-		UDim2.new(0, 8, 0, 23),
-		UDim2.new(1, -16, 0, 20),
+		UDim2.new(0, 8, 0, 21),
+		UDim2.new(1, -16, 0, 19),
 		11
 	)
 	btnLock.BackgroundColor3 = targetLockHabilitadoNoPainel and BOTAO_ROXO_ON or BOTAO_CINZA
@@ -1935,8 +2040,8 @@ local function criarPainelHitbox()
 	local btnPvpLoop = criarBotaoPadrao(
 		pagCombat,
 		pvpFocusLoopAtivo and "PvP Focus Loop: ON" or "PvP Focus Loop: OFF",
-		UDim2.new(0, 8, 0, 46),
-		UDim2.new(1, -16, 0, 20),
+		UDim2.new(0, 8, 0, 42),
+		UDim2.new(1, -16, 0, 19),
 		11
 	)
 	btnPvpLoop.BackgroundColor3 = pvpFocusLoopAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
@@ -1944,8 +2049,8 @@ local function criarPainelHitbox()
 	local btnBackCostas = criarBotaoPadrao(
 		pagCombat,
 		backCostasAtivo and "Back / Costas: ON" or "Back / Costas: OFF",
-		UDim2.new(0, 8, 0, 69),
-		UDim2.new(1, -16, 0, 20),
+		UDim2.new(0, 8, 0, 63),
+		UDim2.new(1, -16, 0, 19),
 		11
 	)
 	btnBackCostas.BackgroundColor3 = backCostasAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
@@ -1953,8 +2058,8 @@ local function criarPainelHitbox()
 	local btnAntiRagdoll = criarBotaoPadrao(
 		pagCombat,
 		antiRagdollAtivo and "Anti-Ragdoll: ON" or "Anti-Ragdoll: OFF",
-		UDim2.new(0, 8, 0, 92),
-		UDim2.new(1, -16, 0, 20),
+		UDim2.new(0, 8, 0, 84),
+		UDim2.new(1, -16, 0, 19),
 		11
 	)
 	btnAntiRagdoll.BackgroundColor3 = antiRagdollAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
@@ -1962,8 +2067,8 @@ local function criarPainelHitbox()
 	local btnAntiGrabRag = criarBotaoPadrao(
 		pagCombat,
 		antiGrabRagAtivo and "Anti Grab Rag: ON" or "Anti Grab Rag: OFF",
-		UDim2.new(0, 8, 0, 115),
-		UDim2.new(1, -16, 0, 20),
+		UDim2.new(0, 8, 0, 105),
+		UDim2.new(1, -16, 0, 19),
 		11
 	)
 	btnAntiGrabRag.BackgroundColor3 = antiGrabRagAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
@@ -1971,8 +2076,8 @@ local function criarPainelHitbox()
 	local btnDeathTp = criarBotaoPadrao(
 		pagCombat,
 		deathTpAtivo and "Death TP: ON" or "Death TP: OFF",
-		UDim2.new(0, 8, 0, 138),
-		UDim2.new(1, -16, 0, 20),
+		UDim2.new(0, 8, 0, 126),
+		UDim2.new(1, -16, 0, 19),
 		11
 	)
 	btnDeathTp.BackgroundColor3 = deathTpAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
@@ -1980,8 +2085,8 @@ local function criarPainelHitbox()
 	local btnNoSlow = criarBotaoPadrao(
 		pagCombat,
 		noSlowAtivo and "No Slow: ON" or "No Slow: OFF",
-		UDim2.new(0, 8, 0, 161),
-		UDim2.new(1, -16, 0, 20),
+		UDim2.new(0, 8, 0, 147),
+		UDim2.new(1, -16, 0, 19),
 		11
 	)
 	btnNoSlow.BackgroundColor3 = noSlowAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
@@ -1989,17 +2094,26 @@ local function criarPainelHitbox()
 	local btnKillAura = criarBotaoPadrao(
 		pagCombat,
 		killAuraAtivo and "Kill Aura (Q): ON" or "Kill Aura (Q): OFF",
-		UDim2.new(0, 8, 0, 184),
-		UDim2.new(1, -16, 0, 20),
+		UDim2.new(0, 8, 0, 168),
+		UDim2.new(1, -16, 0, 19),
 		11
 	)
 	btnKillAura.BackgroundColor3 = killAuraAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
 
+	local btnForceCombat = criarBotaoPadrao(
+		pagCombat,
+		forceCombatAtivo and "Force Combat: ON" or "Force Combat: OFF",
+		UDim2.new(0, 8, 0, 189),
+		UDim2.new(1, -16, 0, 19),
+		11
+	)
+	btnForceCombat.BackgroundColor3 = forceCombatAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
+
 	local btnHit = criarBotaoPadrao(
 		pagCombat,
 		hitboxAtivo and "Hitbox: ON" or "Hitbox: OFF",
-		UDim2.new(0, 8, 0, 207),
-		UDim2.new(0.5, -10, 0, 20),
+		UDim2.new(0, 8, 0, 210),
+		UDim2.new(0.5, -10, 0, 19),
 		10
 	)
 	btnHit.BackgroundColor3 = hitboxAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
@@ -2007,20 +2121,20 @@ local function criarPainelHitbox()
 	local btnVis = criarBotaoPadrao(
 		pagCombat,
 		hitboxVisivel and "Visivel: Sim" or "Visivel: Nao",
-		UDim2.new(0.5, 2, 0, 207),
-		UDim2.new(0.5, -10, 0, 20),
+		UDim2.new(0.5, 2, 0, 210),
+		UDim2.new(0.5, -10, 0, 19),
 		10
 	)
 	btnVis.BackgroundColor3 = hitboxVisivel and BOTAO_ROXO_ON or BOTAO_CINZA
 
-	local sliderSize = criarSliderPadrao(pagCombat, "Size: ", 231, 3, HITBOX_MAX_SLIDER, hitboxSize, function(novoSize)
+	local sliderSize = criarSliderPadrao(pagCombat, "Size: ", 233, 3, HITBOX_MAX_SLIDER, hitboxSize, function(novoSize)
 		hitboxSize = novoSize
 		sincronizarHitboxEMarcadores()
 	end)
 
-	local boxAMG = criarCampoTextoPadrao(pagCombat, "AMG (ex: ana pedro)...", UDim2.new(0, 8, 0, 265), 19)
-	local boxFocus = criarCampoTextoPadrao(pagCombat, "Focus (ex: alvo1 alvo2)...", UDim2.new(0, 8, 0, 286), 19)
-	local boxBackFilter = criarCampoTextoPadrao(pagCombat, "Back / Costas (quem usar)...", UDim2.new(0, 8, 0, 307), 19)
+	local boxAMG = criarCampoTextoPadrao(pagCombat, "AMG (ex: ana pedro)...", UDim2.new(0, 8, 0, 267), 19)
+	local boxFocus = criarCampoTextoPadrao(pagCombat, "Focus (ex: alvo1 alvo2)...", UDim2.new(0, 8, 0, 288), 19)
+	local boxBackFilter = criarCampoTextoPadrao(pagCombat, "Back / Costas (quem usar)...", UDim2.new(0, 8, 0, 309), 19)
 
 	boxAMG:GetPropertyChangedSignal("Text"):Connect(function()
 		amgTexto = boxAMG.Text
@@ -2347,6 +2461,12 @@ local function criarPainelHitbox()
 		setKillAuraEstado(not killAuraAtivo)
 	end)
 
+	btnForceCombat.MouseButton1Click:Connect(function()
+		setForceCombatEstado(not forceCombatAtivo)
+		btnForceCombat.Text = forceCombatAtivo and "Force Combat: ON" or "Force Combat: OFF"
+		btnForceCombat.BackgroundColor3 = forceCombatAtivo and BOTAO_ROXO_ON or BOTAO_CINZA
+	end)
+
 	btnHit.MouseButton1Click:Connect(function()
 		hitboxAtivo = not hitboxAtivo
 		btnHit.Text = hitboxAtivo and "Hitbox: ON" or "Hitbox: OFF"
@@ -2559,6 +2679,7 @@ end)
 RunService.Heartbeat:Connect(function(dt)
 	local agora = os.clock()
 	restaurarSuperficieAntesDoRender()
+	executarForcaCombate(false)
 	aplicarBackCostas()
 	aplicarNoSlow()
 	aplicarJumpMultiplicador()
