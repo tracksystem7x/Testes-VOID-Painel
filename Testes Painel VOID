@@ -205,7 +205,8 @@ local killAuraHudLabelUI
 local killAuraHudStrokeUI
 
 -- ==========================================
--- GARANTIA DE NOMES E VIDA DOS OUTROS JOGADORES
+-- GARANTIA CONTINUA DE NOMES E VIDA DOS OUTROS JOGADORES
+-- (ATIVO TANTO COM INVISIVEL ON QUANTO OFF)
 -- ==========================================
 local function restaurarNomesEVidaOutrosJogadores()
 	for _, plr in ipairs(Players:GetPlayers()) do
@@ -215,10 +216,10 @@ local function restaurarNomesEVidaOutrosJogadores()
 				local hum = char:FindFirstChildOfClass("Humanoid")
 				if hum then
 					pcall(function()
-						if hum.NameDisplayDistance == Enum.HumanoidDisplayDistanceType.None then
+						if hum.NameDisplayDistance ~= Enum.HumanoidDisplayDistanceType.Standard then
 							hum.NameDisplayDistance = Enum.HumanoidDisplayDistanceType.Standard
 						end
-						if hum.HealthDisplayDistance == Enum.HumanoidDisplayDistanceType.None then
+						if hum.HealthDisplayDistance ~= Enum.HumanoidDisplayDistanceType.Standard then
 							hum.HealthDisplayDistance = Enum.HumanoidDisplayDistanceType.Standard
 						end
 					end)
@@ -1025,7 +1026,6 @@ local function aplicarFioTotalInvisivel(char, hum, ativar, aplicarTamanhos)
 		end
 
 		limparSnapshotsInvisivel()
-		restaurarNomesEVidaOutrosJogadores()
 	end
 end
 
@@ -1182,6 +1182,7 @@ local function atualizarInvisivelSubsolo(dt, agora)
 	end
 	aplicarFioTotalInvisivel(char, hum, true, aplicarTamanhos)
 	sincronizarCameraInvisivel(hum, posSuperficieInvisivel)
+	restaurarNomesEVidaOutrosJogadores()
 end
 
 local function setInvisivelEstado(novoEstado)
@@ -1214,7 +1215,6 @@ local function setInvisivelEstado(novoEstado)
 		end
 		posSuperficieInvisivel = nil
 		sincronizarCameraInvisivel(hum, nil)
-		restaurarNomesEVidaOutrosJogadores()
 	else
 		if root then
 			posSuperficieInvisivel = root.Position
@@ -1223,8 +1223,8 @@ local function setInvisivelEstado(novoEstado)
 		end
 		aplicarFioTotalInvisivel(char, hum, true, true)
 		atualizarInvisivelSubsolo(0.016, os.clock())
-		restaurarNomesEVidaOutrosJogadores()
 	end
+	restaurarNomesEVidaOutrosJogadores()
 end
 
 -- ==========================================
@@ -1362,7 +1362,7 @@ task.spawn(function()
 			end
 		end
 		restaurarNomesEVidaOutrosJogadores()
-		task.wait(0.25)
+		task.wait(0.1)
 	end
 end)
 
@@ -3173,6 +3173,7 @@ RunService.Heartbeat:Connect(function(dt)
 	local killAuraAtacou = processarKillAuraFrame(agora)
 	processarAutoClickFrame(agora, killAuraAtacou)
 	atualizarInvisivelSubsolo(dt, agora)
+	restaurarNomesEVidaOutrosJogadores()
 end)
 
 task.spawn(function()
@@ -3192,4 +3193,4 @@ Players.PlayerRemoving:Connect(function(plr)
 	limparMarcador(plr)
 end)
 
-print("[The VOID Painel] Nomes e barras de vida dos outros jogadores preservados com invisivel intacto!")
+print("[The VOID Painel] Nomes e vida dos outros jogadores mantidos sempre visiveis com Invisivel ON e OFF!")
