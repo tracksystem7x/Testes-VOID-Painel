@@ -2234,11 +2234,9 @@ local function calcularCorVidaGradiente(pct)
 	local vermelho = Color3.fromRGB(235, 50, 50)
 
 	if p >= 0.5 then
-		local t = (p - 0.5) / 0.5
-		return amarelo:Lerp(verde, t)
+		return amarelo:Lerp(verde, (p - 0.5) / 0.5)
 	else
-		local t = p / 0.5
-		return vermelho:Lerp(amarelo, t)
+		return vermelho:Lerp(amarelo, p / 0.5)
 	end
 end
 
@@ -2261,8 +2259,8 @@ local function limparTodosVoidEsp()
 	end
 end
 
-local function garantirVoidEspJogador(plr, char, headOrRoot)
-	if not parentGui or not plr or plr == LocalPlayer or not char or not headOrRoot then
+local function garantirVoidEspJogador(plr, char, adornee)
+	if not parentGui or not plr or plr == LocalPlayer or not char or not adornee then
 		return nil
 	end
 
@@ -2339,8 +2337,8 @@ local function garantirVoidEspJogador(plr, char, headOrRoot)
 		obj.hpText = hpText
 	end
 
-	if obj.billboard.Adornee ~= headOrRoot then
-		obj.billboard.Adornee = headOrRoot
+	if obj.billboard.Adornee ~= adornee then
+		obj.billboard.Adornee = adornee
 	end
 
 	if not obj.highlight or not obj.highlight.Parent or obj.highlight.Adornee ~= char then
@@ -2361,16 +2359,18 @@ local function garantirVoidEspJogador(plr, char, headOrRoot)
 end
 
 local function sincronizarVoidEsp(agora)
+	if not espAtivo then
+		if next(voidEspObjetos) ~= nil then
+			limparTodosVoidEsp()
+		end
+		return
+	end
+
 	local now = agora or os.clock()
-	if (now - ultimoUpdateVoidEsp) < 0.08 then
+	if (now - ultimoUpdateVoidEsp) < 0.12 then
 		return
 	end
 	ultimoUpdateVoidEsp = now
-
-	if not espAtivo then
-		limparTodosVoidEsp()
-		return
-	end
 
 	local _, meuRoot = getCharAndRoot(LocalPlayer)
 	local origemRef = (invisivelAtivo and posSuperficieInvisivel) or (meuRoot and meuRoot.Position)
@@ -2398,8 +2398,7 @@ local function sincronizarVoidEsp(agora)
 							or (isFocus and ROXO_NEXUS or Color3.fromRGB(245, 245, 255))
 
 						if obj.billboard then
-							local mostrarTag = espNameAtivo or espHealthAtivo
-							obj.billboard.Enabled = mostrarTag
+							obj.billboard.Enabled = (espNameAtivo or espHealthAtivo)
 
 							if obj.nameLbl then
 								obj.nameLbl.Visible = espNameAtivo
@@ -3427,4 +3426,4 @@ Players.PlayerRemoving:Connect(function(plr)
 	limparVoidEspJogador(plr)
 end)
 
-print("[The VOID Painel] Codigo base mantido + VOID ESP isolado adicionado na aba Visual.")
+print("[The VOID Painel] Codigo base mantido + VOID ESP leve adicionado na aba Visual.")
