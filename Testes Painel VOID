@@ -89,7 +89,7 @@ local NO_ANIMATION_PADRAO_ATIVO = false
 local INVISIVEL_PADRAO_ATIVO = false
 
 -- Abaixo do piso da quadra e corredor para ficar oculto de verdade (4.1 studs)
-local INVISIVEL_PROFUNDIDADE = 4.12
+local INVISIVEL_PROFUNDIDADE = 4.15
 local COR_PISO_QUADRA = Color3.fromRGB(196, 154, 108)
 
 local HUD_LOSANGO_PADRAO_VISIVEL = true
