@@ -62,6 +62,9 @@ local CFG = {
 	DELAY_KA_NORM = 0.008,
 	RAJADA_KA_NORM = 3,
 	DELAY_CLK_NORM = 0.0001,
+	DELAY_MULTI_PVP = 0.0001,
+	RAJADA_MULTI_PVP = 4,
+	INTERVALO_ROT_MULTI = 0.07,
 	DELAY_KA_INV = 0.02,
 	RAJADA_KA_INV = 4,
 	DELAY_CLK_INV = 0.02,
@@ -94,8 +97,8 @@ local CFG = {
 	ROXO_ON = Color3.fromRGB(126, 52, 218),
 
 	PAINEL_W = 354,
-	PAINEL_H = 626,
-	POS_PAINEL = UDim2.new(1, -372, 1, -640),
+	PAINEL_H = 650,
+	POS_PAINEL = UDim2.new(1, -372, 1, -664),
 	ESP_MAX_DIST = 350,
 }
 
@@ -108,6 +111,10 @@ local S = {
 	ativo = false,
 	lockOn = true,
 	pvpLoop = false,
+	multiPvp = false,
+	alvoMulti = nil,
+	tRotMulti = 0,
+	tMultiClk = 0,
 	backCostas = false,
 	grabAssist = true,
 	spamGrab = false,
@@ -828,7 +835,7 @@ local function monMorte(ch)
 end
 
 local function recQueda(nc)
-	S.alvo, S.alvoPvp, S.alvoKa, S.alvoGrabTravado, S.posInv, S.cacheChar = nil, nil, nil, nil, nil, nil
+	S.alvo, S.alvoPvp, S.alvoKa, S.alvoMulti, S.alvoGrabTravado, S.posInv, S.cacheChar = nil, nil, nil, nil, nil, nil, nil
 	S.tJanelaGrab = 0
 	destAnc()
 	limpSnapInv()
@@ -1179,7 +1186,7 @@ local function escolherAlvoGrab(mr, rMax, candPreferido)
 		if ra then return ra, candPreferido, d end
 	end
 
-	for _, cand in ipairs({ S.alvoPvp, S.alvoKa }) do
+	for _, cand in ipairs({ S.alvoPvp, S.alvoKa, S.alvoMulti }) do
 		local ra, d = validarPlr(cand)
 		if ra then return ra, cand, d end
 	end
@@ -1401,6 +1408,70 @@ local function getAlvoKa(mr, rMax, now)
 	return bestR, bestP
 end
 
+-- ==========================================
+-- MULTI PVP (ROTAÇÃO RÁPIDA + ALTA CADÊNCIA SEM PERDA DE FPS)
+-- ==========================================
+local function getAlvoMultiPvp(mr, now)
+	if not S.multiPvp or not mr then
+		S.alvoMulti = nil
+		return nil, nil
+	end
+	local rMax = math.max(CFG.DIST_KA, raioHitReg())
+	updCacheAlvos(now, mr, rMax)
+	local orig = (S.inv and S.posInv) or mr.Position
+	local candidatos = {}
+	for _, it in ipairs(S.cacheAlvos) do
+		local d = (it.root.Position - orig).Magnitude
+		if d <= rMax and d > 0.1 then
+			table.insert(candidatos, it)
+		end
+	end
+	if #candidatos == 0 then
+		S.alvoMulti = nil
+		return nil, nil
+	end
+	table.sort(candidatos, function(a, b)
+		return a.dist < b.dist
+	end)
+
+	if (now - S.tRotMulti) >= CFG.INTERVALO_ROT_MULTI or not S.alvoMulti then
+		S.tRotMulti = now
+		local idxAtual = 0
+		for i, it in ipairs(candidatos) do
+			if it.plr == S.alvoMulti then
+				idxAtual = i
+				break
+			end
+		end
+		local proxIdx = (idxAtual % #candidatos) + 1
+		S.alvoMulti = candidatos[proxIdx].plr
+	end
+
+	for _, it in ipairs(candidatos) do
+		if it.plr == S.alvoMulti then
+			return it.root, it.plr
+		end
+	end
+	S.alvoMulti = candidatos[1].plr
+	return candidatos[1].root, candidatos[1].plr
+end
+
+local function aplFocoMulti(now)
+	if not S.multiPvp or S.inv or UserInputService:GetFocusedTextBox() then return end
+	local _, mr = getCR(LocalPlayer)
+	if not mr then return end
+	local alvoRoot = getAlvoMultiPvp(mr, now)
+	if not alvoRoot then return end
+	local dx = alvoRoot.Position.X - mr.Position.X
+	local dz = alvoRoot.Position.Z - mr.Position.Z
+	if (dx * dx + dz * dz) > 0.0025 then
+		pcall(function()
+			mr.AssemblyAngularVelocity = Vector3.zero
+			mr.CFrame = CFrame.new(mr.Position) * CFrame.fromEulerAnglesYXZ(0, math.atan2(-dx, -dz), 0)
+		end)
+	end
+end
+
 local function aplCostas()
 	if not S.backCostas or S.inv or UserInputService:GetFocusedTextBox() then return end
 	local _, mr, h = getCR(LocalPlayer)
@@ -1453,7 +1524,7 @@ local function pulsoAtk(ch, mr, now, atTool)
 	local h = ch and ch:FindFirstChildOfClass("Humanoid")
 	if S.inv and mr then travarInv(ch, mr, h) end
 	if not S.inv then syncCombate(now) end
-	if mr and not S.pvpLoop and not S.inv then desviarAmg(mr) end
+	if mr and not S.pvpLoop and not S.multiPvp and not S.inv then desviarAmg(mr) end
 	if atTool and ch then
 		local tool = ch:FindFirstChildOfClass("Tool")
 		if tool and tool.Parent == ch then
@@ -1463,6 +1534,21 @@ local function pulsoAtk(ch, mr, now, atTool)
 	end
 	clkRapido()
 	if S.inv and mr then travarInv(ch, mr, h) end
+end
+
+local function procMultiPvp(now)
+	if not S.multiPvp or UserInputService:GetFocusedTextBox() then return false end
+	if (now - S.tMultiClk) < CFG.DELAY_MULTI_PVP then return false end
+	local ch, mr, h = getCR(LocalPlayer)
+	if not ch or not mr then return false end
+	local alvoRoot = getAlvoMultiPvp(mr, now)
+	if not alvoRoot then return false end
+	S.tMultiClk = now
+	for i = 1, CFG.RAJADA_MULTI_PVP do
+		pulsoAtk(ch, mr, now, i == 1)
+	end
+	if S.inv then travarInv(ch, mr, h) end
+	return true
 end
 
 local function procKa(now)
@@ -1992,39 +2078,40 @@ local function criarPainel()
 	for n, tb in pairs(tBtns) do tb.MouseButton1Click:Connect(function() selAba(n) end) end
 
 	-- ==========================
-	-- ABA COMBAT
+	-- ABA COMBAT (COM BOTÃO MULTI PVP)
 	-- ==========================
 	local pC = tPags.Combat
 	mkSec(pC, "ATAQUE E MIRA", 0)
-	local bAuto = mkBtn(pC, "AutoClick VOID (E): OFF", UDim2.new(0, 12, 0, 20), UDim2.new(1, -24, 0, 24), 11)
-	local bLock = mkBtn(pC, S.lockOn and "Target Lock: ON" or "Target Lock: OFF", UDim2.new(0, 12, 0, 47), UDim2.new(1, -24, 0, 24), 11); bLock.BackgroundColor3 = S.lockOn and CFG.ROXO_ON or CFG.CINZA
-	local bPvp = mkBtn(pC, S.pvpLoop and "PvP Focus Loop: ON" or "PvP Focus Loop: OFF", UDim2.new(0, 12, 0, 74), UDim2.new(1, -24, 0, 24), 11); bPvp.BackgroundColor3 = S.pvpLoop and CFG.ROXO_ON or CFG.CINZA
-	local bKa = mkBtn(pC, S.ka and "Kill Aura (Q): ON" or "Kill Aura (Q): OFF", UDim2.new(0, 12, 0, 101), UDim2.new(0.5, -15, 0, 24), 11); bKa.BackgroundColor3 = S.ka and CFG.ROXO_ON or CFG.CINZA
-	local bCost = mkBtn(pC, S.backCostas and "Back / Costas: ON" or "Back / Costas: OFF", UDim2.new(0.5, 3, 0, 101), UDim2.new(0.5, -15, 0, 24), 11); bCost.BackgroundColor3 = S.backCostas and CFG.ROXO_ON or CFG.CINZA
+	local bAuto = mkBtn(pC, "AutoClick VOID (E): OFF", UDim2.new(0, 12, 0, 19), UDim2.new(1, -24, 0, 23), 11)
+	local bLock = mkBtn(pC, S.lockOn and "Target Lock: ON" or "Target Lock: OFF", UDim2.new(0, 12, 0, 45), UDim2.new(1, -24, 0, 23), 11); bLock.BackgroundColor3 = S.lockOn and CFG.ROXO_ON or CFG.CINZA
+	local bPvp = mkBtn(pC, S.pvpLoop and "PvP Focus Loop: ON" or "PvP Focus Loop: OFF", UDim2.new(0, 12, 0, 71), UDim2.new(0.5, -15, 0, 23), 11); bPvp.BackgroundColor3 = S.pvpLoop and CFG.ROXO_ON or CFG.CINZA
+	local bMultiPvp = mkBtn(pC, S.multiPvp and "Multi PvP: ON" or "Multi PvP: OFF", UDim2.new(0.5, 3, 0, 71), UDim2.new(0.5, -15, 0, 23), 11); bMultiPvp.BackgroundColor3 = S.multiPvp and CFG.ROXO_ON or CFG.CINZA
+	local bKa = mkBtn(pC, S.ka and "Kill Aura (Q): ON" or "Kill Aura (Q): OFF", UDim2.new(0, 12, 0, 97), UDim2.new(0.5, -15, 0, 23), 11); bKa.BackgroundColor3 = S.ka and CFG.ROXO_ON or CFG.CINZA
+	local bCost = mkBtn(pC, S.backCostas and "Back / Costas: ON" or "Back / Costas: OFF", UDim2.new(0.5, 3, 0, 97), UDim2.new(0.5, -15, 0, 23), 11); bCost.BackgroundColor3 = S.backCostas and CFG.ROXO_ON or CFG.CINZA
 
-	mkSec(pC, "GRAB E PUXÃO", 130)
-	local bGrabAssist = mkBtn(pC, S.grabAssist and "Grab (G): ON" or "Grab (G): OFF", UDim2.new(0, 12, 0, 150), UDim2.new(0.5, -15, 0, 24), 11); bGrabAssist.BackgroundColor3 = S.grabAssist and CFG.ROXO_ON or CFG.CINZA
-	local bSpamGrab = mkBtn(pC, S.spamGrab and "Spam Grab: ON" or "Spam Grab: OFF", UDim2.new(0.5, 3, 0, 150), UDim2.new(0.5, -15, 0, 24), 11); bSpamGrab.BackgroundColor3 = S.spamGrab and CFG.ROXO_ON or CFG.CINZA
-	local slGrabDist = mkSlider(pC, "Alcance Grab: ", 178, 1, 100, S.grabDist, function(v) S.grabDist = v end)
-	local slGrabPull = mkSlider(pC, "Distância Puxar: ", 209, 1, 100, S.grabPullDist, function(v) S.grabPullDist = v end)
+	mkSec(pC, "GRAB E PUXÃO", 125)
+	local bGrabAssist = mkBtn(pC, S.grabAssist and "Grab (G): ON" or "Grab (G): OFF", UDim2.new(0, 12, 0, 145), UDim2.new(0.5, -15, 0, 23), 11); bGrabAssist.BackgroundColor3 = S.grabAssist and CFG.ROXO_ON or CFG.CINZA
+	local bSpamGrab = mkBtn(pC, S.spamGrab and "Spam Grab: ON" or "Spam Grab: OFF", UDim2.new(0.5, 3, 0, 145), UDim2.new(0.5, -15, 0, 23), 11); bSpamGrab.BackgroundColor3 = S.spamGrab and CFG.ROXO_ON or CFG.CINZA
+	local slGrabDist = mkSlider(pC, "Alcance Grab: ", 173, 1, 100, S.grabDist, function(v) S.grabDist = v end)
+	local slGrabPull = mkSlider(pC, "Distância Puxar: ", 204, 1, 100, S.grabPullDist, function(v) S.grabPullDist = v end)
 
-	mkSec(pC, "PROTEÇÕES E COMBATE", 243)
-	local bRag = mkBtn(pC, S.antiRag and "Anti-Ragdoll: ON" or "Anti-Ragdoll: OFF", UDim2.new(0, 12, 0, 263), UDim2.new(0.5, -15, 0, 24), 11); bRag.BackgroundColor3 = S.antiRag and CFG.ROXO_ON or CFG.CINZA
-	local bGrab = mkBtn(pC, S.antiGrab and "Anti Grab Rag: ON" or "Anti Grab Rag: OFF", UDim2.new(0.5, 3, 0, 263), UDim2.new(0.5, -15, 0, 24), 11); bGrab.BackgroundColor3 = S.antiGrab and CFG.ROXO_ON or CFG.CINZA
-	local bDtp = mkBtn(pC, S.deathTp and "Death TP: ON" or "Death TP: OFF", UDim2.new(0, 12, 0, 290), UDim2.new(0.5, -15, 0, 24), 11); bDtp.BackgroundColor3 = S.deathTp and CFG.ROXO_ON or CFG.CINZA
-	local bNs = mkBtn(pC, S.noSlow and "No Slow: ON" or "No Slow: OFF", UDim2.new(0.5, 3, 0, 290), UDim2.new(0.5, -15, 0, 24), 11); bNs.BackgroundColor3 = S.noSlow and CFG.ROXO_ON or CFG.CINZA
-	local bFgt = mkBtn(pC, S.fighting and "Combate: ON" or "Combate: OFF", UDim2.new(0, 12, 0, 317), UDim2.new(1, -24, 0, 24), 11); bFgt.BackgroundColor3 = S.fighting and CFG.ROXO_ON or CFG.CINZA
+	mkSec(pC, "PROTEÇÕES E COMBATE", 238)
+	local bRag = mkBtn(pC, S.antiRag and "Anti-Ragdoll: ON" or "Anti-Ragdoll: OFF", UDim2.new(0, 12, 0, 258), UDim2.new(0.5, -15, 0, 23), 11); bRag.BackgroundColor3 = S.antiRag and CFG.ROXO_ON or CFG.CINZA
+	local bGrab = mkBtn(pC, S.antiGrab and "Anti Grab Rag: ON" or "Anti Grab Rag: OFF", UDim2.new(0.5, 3, 0, 258), UDim2.new(0.5, -15, 0, 23), 11); bGrab.BackgroundColor3 = S.antiGrab and CFG.ROXO_ON or CFG.CINZA
+	local bDtp = mkBtn(pC, S.deathTp and "Death TP: ON" or "Death TP: OFF", UDim2.new(0, 12, 0, 284), UDim2.new(0.5, -15, 0, 23), 11); bDtp.BackgroundColor3 = S.deathTp and CFG.ROXO_ON or CFG.CINZA
+	local bNs = mkBtn(pC, S.noSlow and "No Slow: ON" or "No Slow: OFF", UDim2.new(0.5, 3, 0, 284), UDim2.new(0.5, -15, 0, 23), 11); bNs.BackgroundColor3 = S.noSlow and CFG.ROXO_ON or CFG.CINZA
+	local bFgt = mkBtn(pC, S.fighting and "Combate: ON" or "Combate: OFF", UDim2.new(0, 12, 0, 310), UDim2.new(1, -24, 0, 23), 11); bFgt.BackgroundColor3 = S.fighting and CFG.ROXO_ON or CFG.CINZA
 
-	mkSec(pC, "HITBOX E ALVOS", 346)
-	local bHit = mkBtn(pC, S.hitOn and "Hitbox: ON" or "Hitbox: OFF", UDim2.new(0, 12, 0, 366), UDim2.new(0.5, -15, 0, 24), 11); bHit.BackgroundColor3 = S.hitOn and CFG.ROXO_ON or CFG.CINZA
-	local bVis = mkBtn(pC, S.hitVis and "Visível: Sim" or "Visível: Não", UDim2.new(0.5, 3, 0, 366), UDim2.new(0.5, -15, 0, 24), 11); bVis.BackgroundColor3 = S.hitVis and CFG.ROXO_ON or CFG.CINZA
-	local slSize = mkSlider(pC, "Tamanho Hitbox: ", 394, 3, CFG.HIT_MAX, S.hitSize, function(v) S.hitSize = v; syncHitMarc() end)
-	local bxAmg = mkBox(pC, "AMG (ex: ana pedro)...", UDim2.new(0, 12, 0, 426), 22)
-	local bxFoc = mkBox(pC, "Focus (ex: alvo1 alvo2)...", UDim2.new(0, 12, 0, 451), 22)
-	local bxBck = mkBox(pC, "Back / Costas (quem puxar)...", UDim2.new(0, 12, 0, 476), 22)
+	mkSec(pC, "HITBOX E ALVOS", 339)
+	local bHit = mkBtn(pC, S.hitOn and "Hitbox: ON" or "Hitbox: OFF", UDim2.new(0, 12, 0, 359), UDim2.new(0.5, -15, 0, 23), 11); bHit.BackgroundColor3 = S.hitOn and CFG.ROXO_ON or CFG.CINZA
+	local bVis = mkBtn(pC, S.hitVis and "Visível: Sim" or "Visível: Não", UDim2.new(0.5, 3, 0, 359), UDim2.new(0.5, -15, 0, 23), 11); bVis.BackgroundColor3 = S.hitVis and CFG.ROXO_ON or CFG.CINZA
+	local slSize = mkSlider(pC, "Tamanho Hitbox: ", 387, 3, CFG.HIT_MAX, S.hitSize, function(v) S.hitSize = v; syncHitMarc() end)
+	local bxAmg = mkBox(pC, "AMG (ex: ana pedro)...", UDim2.new(0, 12, 0, 419), 22)
+	local bxFoc = mkBox(pC, "Focus (ex: alvo1 alvo2)...", UDim2.new(0, 12, 0, 444), 22)
+	local bxBck = mkBox(pC, "Back / Costas (quem puxar)...", UDim2.new(0, 12, 0, 469), 22)
 
-	bxAmg:GetPropertyChangedSignal("Text"):Connect(function() S.amg = bxAmg.Text; S.alvoKa = nil; if S.alvoPvp and ehAmg(S.alvoPvp) then S.alvoPvp = nil end; syncHitMarc() end)
-	bxFoc:GetPropertyChangedSignal("Text"):Connect(function() S.focus = bxFoc.Text; S.alvoKa = nil; syncHitMarc() end)
+	bxAmg:GetPropertyChangedSignal("Text"):Connect(function() S.amg = bxAmg.Text; S.alvoKa = nil; S.alvoMulti = nil; if S.alvoPvp and ehAmg(S.alvoPvp) then S.alvoPvp = nil end; syncHitMarc() end)
+	bxFoc:GetPropertyChangedSignal("Text"):Connect(function() S.focus = bxFoc.Text; S.alvoKa = nil; S.alvoMulti = nil; syncHitMarc() end)
 	bxBck:GetPropertyChangedSignal("Text"):Connect(function() S.backFilt = bxBck.Text end)
 
 	-- ==========================
@@ -2077,7 +2164,7 @@ local function criarPainel()
 	local bEspB = mkBtn(pV, S.espBody and "ESP Body: ON" or "ESP Body: OFF", UDim2.new(0, 12, 0, 203), UDim2.new(1, -24, 0, 26), 11); bEspB.BackgroundColor3 = S.espBody and CFG.ROXO_ON or CFG.CINZA
 
 	-- ==========================
-	-- ABA CONFIG (ÚNICO BOTÃO RESETAR PERSONAGEM)
+	-- ABA CONFIG
 	-- ==========================
 	local pCfg = tPags.Config
 	mkSec(pCfg, "DESEMPENHO E JANELA", 0)
@@ -2129,6 +2216,12 @@ local function criarPainel()
 	bAuto.MouseButton1Click:Connect(function() setLock(not S.ativo) end)
 	bLock.MouseButton1Click:Connect(function() S.lockOn = not S.lockOn; bLock.Text = S.lockOn and "Target Lock: ON" or "Target Lock: OFF"; bLock.BackgroundColor3 = S.lockOn and CFG.ROXO_ON or CFG.CINZA; if not S.lockOn then S.alvo = nil end end)
 	bPvp.MouseButton1Click:Connect(function() S.pvpLoop = not S.pvpLoop; bPvp.Text = S.pvpLoop and "PvP Focus Loop: ON" or "PvP Focus Loop: OFF"; bPvp.BackgroundColor3 = S.pvpLoop and CFG.ROXO_ON or CFG.CINZA; S.alvoPvp, S.alvo, S.tJanelaHit = nil, nil, 0; syncHitMarc() end)
+	bMultiPvp.MouseButton1Click:Connect(function()
+		S.multiPvp = not S.multiPvp
+		bMultiPvp.Text = S.multiPvp and "Multi PvP: ON" or "Multi PvP: OFF"
+		bMultiPvp.BackgroundColor3 = S.multiPvp and CFG.ROXO_ON or CFG.CINZA
+		S.alvoMulti, S.tRotMulti, S.tMultiClk = nil, 0, 0
+	end)
 	bCost.MouseButton1Click:Connect(function() S.backCostas = not S.backCostas; bCost.Text = S.backCostas and "Back / Costas: ON" or "Back / Costas: OFF"; bCost.BackgroundColor3 = S.backCostas and CFG.ROXO_ON or CFG.CINZA end)
 	bGrabAssist.MouseButton1Click:Connect(function() S.grabAssist = not S.grabAssist; bGrabAssist.Text = S.grabAssist and "Grab (G): ON" or "Grab (G): OFF"; bGrabAssist.BackgroundColor3 = S.grabAssist and CFG.ROXO_ON or CFG.CINZA end)
 	bSpamGrab.MouseButton1Click:Connect(function() setSpamGrab(not S.spamGrab) end)
@@ -2155,7 +2248,7 @@ local function criarPainel()
 	bRst.MouseButton1Click:Connect(function() fr.Position = CFG.POS_PAINEL end)
 
 	selAba("Combat")
-	UI.painel, UI.btnAuto, UI.btnKa, UI.btnInv, UI.btnSpamGrab, UI.btnFight, UI.btnNoAnim = fr, bAuto, bKa, bIv, bSpamGrab, bFgt, bNa
+	UI.painel, UI.btnAuto, UI.btnKa, UI.btnInv, UI.btnSpamGrab, UI.btnFight, UI.btnNoAnim, UI.btnMultiPvp = fr, bAuto, bKa, bIv, bSpamGrab, bFgt, bNa, bMultiPvp
 	updKaUI(S.ka)
 	updInvUI(S.inv)
 	updFightUI()
@@ -2216,6 +2309,7 @@ RunService.RenderStepped:Connect(function(dt)
 	local now = os.clock()
 	if S.pvpLoop and not S.alvoPvp and now <= S.tJanelaHit then regPvpHit() end
 	aplFoco()
+	aplFocoMulti(now)
 	restPulso()
 	if S.grabAssist and now <= S.tJanelaGrab then aplGrabAssist(false, true) end
 	if S.inv then updInv(0, now) end
@@ -2243,8 +2337,11 @@ end)
 RunService.Heartbeat:Connect(function(dt)
 	local now = os.clock()
 	aplCostas(); aplNoSlow(); aplJump(); aplAntiRag(); aplAntiGrab(); aplSpeed(dt)
+	local multiAtk = procMultiPvp(now)
 	local kaAtk = procKa(now)
-	procClk(now, kaAtk)
+	if not multiAtk then
+		procClk(now, kaAtk)
+	end
 	updInv(dt, now)
 end)
 
@@ -2258,9 +2355,10 @@ end)
 Players.PlayerRemoving:Connect(function(plr)
 	if S.alvoKa == plr then S.alvoKa = nil end
 	if S.alvoPvp == plr then S.alvoPvp = nil end
+	if S.alvoMulti == plr then S.alvoMulti = nil end
 	if S.alvoGrabTravado == plr then S.alvoGrabTravado = nil end
 	limpMarc(plr)
 	S.limpEspPlr(plr)
 end)
 
-print("[The VOID Painel] Varredura concluída: atalhos Q/E, botões, Combate ON/OFF e Resetar Personagem corrigidos.")
+print("[The VOID Painel] Multi PvP adicionado com rotação rápida e alta cadência sem queda de FPS.")
